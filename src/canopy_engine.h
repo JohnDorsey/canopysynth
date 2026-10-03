@@ -96,6 +96,30 @@ CANOPY_API int32_t canopy_engine_get_knob(CanopyEngine *engine, int64_t node_id,
    not exist; a node type without an on_action handler ignores the call. */
 CANOPY_API int32_t canopy_engine_action(CanopyEngine *engine, int64_t node_id, const char *action);
 
+/* What a node of the installed graph last said about itself with canopy_ctx_set_message ("file not found..."; empty for nothing to say):
+   copied into `buffer`, cut to `capacity` bytes and NUL-terminated if too small (buffer may be NULL when the capacity is 0); *length gets the
+   full length in bytes. CANOPY_ERR_NODE for an unknown node ID. */
+CANOPY_API int32_t canopy_engine_node_message(CanopyEngine *engine, int64_t node_id, char *buffer, int32_t capacity, int32_t *length);
+
+/* ---- boundary nodes: how the host talks to the installed graph (design section 10) ----
+   The host addresses a boundary node by its name (the text setting `name`; compiling refuses a graph in which a name is empty or used twice).
+   A boundary inlet is written by the host; a boundary outlet is read by it. Names are case-sensitive and compared byte for byte. */
+enum { CANOPY_BOUNDARY_INLET = 0, CANOPY_BOUNDARY_OUTLET = 1 };
+
+/* Writes `value` (any float: NaN, infinities and values beyond -1 .. 1 included, nothing is clamped) to the boundary inlet called `name`: an
+   atomic store, visible to every query that starts after it, from any thread. CANOPY_ERR_NODE if the installed graph has no boundary inlet
+   of that name (a boundary outlet of that name does not count), CANOPY_ERR_ARGUMENT for a NULL pointer. The value belongs to the node, not to
+   its name or to a graph description: it survives installing another graph, also when the node is renamed, and starts at 0.0 for a new node. */
+CANOPY_API int32_t canopy_engine_set_boundary(CanopyEngine *engine, const char *name, float value);
+
+/* The boundary nodes of the installed graph, sorted by name (byte order): how many, and the one at `index` (0 .. count - 1). `name` receives
+   the name, NUL-terminated and cut to `name_capacity` bytes if that is too small (it may be NULL when the capacity is 0); *name_length gets
+   its full length in bytes without the NUL, so a caller can ask again with a buffer that is big enough. Every output pointer may be NULL.
+   *kind is CANOPY_BOUNDARY_INLET or _OUTLET. CANOPY_ERR_INDEX if there is no such index (the graph can change between the two calls). */
+CANOPY_API int32_t canopy_engine_boundary_count(CanopyEngine *engine);
+CANOPY_API int32_t canopy_engine_boundary_at(CanopyEngine *engine, int32_t index, char *name, int32_t name_capacity, int32_t *name_length,
+                                             int32_t *kind, int64_t *node_id);
+
 /* ---- instances ---- */
 typedef struct CanopyInstance CanopyInstance;
 
@@ -116,6 +140,12 @@ CANOPY_API int64_t canopy_instance_graph_serial(const CanopyInstance *instance);
 CANOPY_API float canopy_instance_inlet_at(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t);
 CANOPY_API int32_t canopy_instance_inlet_span(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t0, int64_t t1, int64_t n,
                                               float *out);
+
+/* The same two queries through the boundary outlet called `name` (in the graph the instance runs; a newly installed graph is adopted first):
+   statuses as above, with CANOPY_ERR_NODE when there is no boundary outlet of that name (a boundary inlet of that name does not count) and
+   CANOPY_ERR_ARGUMENT for a NULL `name`; a point query that cannot be answered returns 0.0f. */
+CANOPY_API float canopy_instance_read_at(CanopyInstance *instance, const char *name, int64_t t);
+CANOPY_API int32_t canopy_instance_read_span(CanopyInstance *instance, const char *name, int64_t t0, int64_t t1, int64_t n, float *out);
 
 /* ---- diagnostics: memory the library has allocated and not yet freed, and blocks ever allocated (to check for leaks) ---- */
 CANOPY_API int64_t canopy_alloc_live(void);

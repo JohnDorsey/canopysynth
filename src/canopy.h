@@ -12,7 +12,7 @@
 
 /* The delivery counter: bumped by exactly 1 once per finished prompt that changed code. The Python package has the same number
    (canopysynth/version.py); a test checks that the two agree, and the Python code refuses to run against a DLL that disagrees. */
-#define CANOPYSYNTH_BUILD 5
+#define CANOPYSYNTH_BUILD 7
 
 CANOPY_API int32_t canopy_build_number(void);
 
@@ -31,7 +31,7 @@ enum {
     CANOPY_ERR_DESCRIPTOR = 8, /* any other fault in a descriptor (the registry's last error says which) */
     CANOPY_ERR_MEMORY = 9,     /* out of memory */
     CANOPY_ERR_GRAPH = 10,     /* a graph that cannot be compiled (canopy_engine_last_error() says why) */
-    CANOPY_ERR_NODE = 11,      /* no node with that ID in the graph */
+    CANOPY_ERR_NODE = 11,      /* no node with that ID in the graph, or no boundary node of that name and kind */
     CANOPY_ERR_PORT = 12,      /* an inlet or outlet index outside the node's ports */
     CANOPY_ERR_ARGUMENT = 13,  /* a NULL pointer, a value outside its range, or a call that is not allowed in this place */
     CANOPY_ERR_BUSY = 14       /* the instance is in use by another call, or the engine still has instances */

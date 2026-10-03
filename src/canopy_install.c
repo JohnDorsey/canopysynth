@@ -47,6 +47,7 @@ static CanopyNodeRecord *record_for(CanopyEngine *engine, const CanopyCNode *nod
     record = (CanopyNodeRecord *)canopy_alloc(sizeof *record);
     if (!record) return NULL;
     record->uid = ++engine->uid;
+    record->engine = engine;
     record->id = node->id;
     record->type = node->type;
     record->fresh = 1;
@@ -180,6 +181,7 @@ void canopy_reclaim(CanopyEngine *engine)
         engine->n_compiled--;
         canopy_free_graph(engine, oldest);
     }
+    canopy_retire_collect(engine);
 }
 
 /* ---- installing ---- */

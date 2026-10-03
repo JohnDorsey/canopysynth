@@ -58,6 +58,16 @@ instance_arena_floats = declare("canopy_instance_arena_floats", i64, vp)
 instance_inlet_at = declare("canopy_instance_inlet_at", f32, vp, i64, i32, i64)
 instance_inlet_span = declare("canopy_instance_inlet_span", i32, vp, i64, i32, i64, i64, i64, p_float)
 
+BOUNDARY_INLET, BOUNDARY_OUTLET = 0, 1
+ERR_INDEX = 4
+engine_set_boundary = declare("canopy_engine_set_boundary", i32, vp, cstr, f32)
+engine_boundary_count = declare("canopy_engine_boundary_count", i32, vp)
+engine_boundary_at = declare("canopy_engine_boundary_at", i32, vp, i32, ctypes.c_char_p, i32, ctypes.POINTER(i32), ctypes.POINTER(i32),
+                             ctypes.POINTER(i64))
+engine_node_message = declare("canopy_engine_node_message", i32, vp, i64, ctypes.c_char_p, i32, ctypes.POINTER(i32))
+instance_read_at = declare("canopy_instance_read_at", f32, vp, cstr, i64)
+instance_read_span = declare("canopy_instance_read_span", i32, vp, cstr, i64, i64, i64, p_float)
+
 ctx_inlet_at = declare("canopy_inlet_at", f32, vp, i32, i64)
 ctx_inlet_span = declare("canopy_inlet_span", i32, vp, i32, i64, i64, i64, p_float)
 ctx_scratch = declare("canopy_scratch", p_float, vp, i64)

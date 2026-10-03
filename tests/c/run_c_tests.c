@@ -44,6 +44,9 @@ void register_test_query(void);
 void register_test_scratch(void);
 void register_test_state(void);
 void register_test_swap(void);
+void register_test_boundary(void);
+void register_test_retire(void);
+void register_test_fileread(void);
 
 int main(void)
 {
@@ -70,6 +73,9 @@ int main(void)
     register_test_scratch();
     register_test_state();
     register_test_swap();
+    register_test_boundary();
+    register_test_retire();
+    register_test_fileread();
     printf("\n%d passed, %d failed\n", ctest_passed, ctest_failed);
 #ifdef CANOPY_DEBUG_HEAP
     if (_CrtDumpMemoryLeaks()) {

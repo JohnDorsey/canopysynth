@@ -231,11 +231,14 @@ const char *canopy_ctx_string(CanopyCtx *ctx, int32_t setting)
    refused rather than allowed to corrupt the arena. */
 static int acquire(CanopyInstance *instance)
 {
-    return atomic_exchange_explicit(&instance->busy, 1, memory_order_acquire) == 0;
+    if (atomic_exchange_explicit(&instance->busy, 1, memory_order_acquire) != 0) return 0;
+    atomic_fetch_add_explicit(&instance->epoch, 1, memory_order_seq_cst);          /* odd: a query is running (see canopy_ctx_retire) */
+    return 1;
 }
 
 static void release(CanopyInstance *instance)
 {
+    atomic_fetch_add_explicit(&instance->epoch, 1, memory_order_seq_cst);          /* even again */
     atomic_store_explicit(&instance->busy, 0, memory_order_release);
 }
 
@@ -248,6 +251,50 @@ float canopy_instance_inlet_at(CanopyInstance *instance, int64_t node_id, int32_
     if (canopy_compiled_find(instance->graph, node_id, &index)) value = inlet_at(instance, index, inlet, t);
     release(instance);
     return value;
+}
+
+/* The boundary outlet called `name` in the graph the instance runs, as a node index, or -1. */
+static int32_t outlet_by_name(const CanopyInstance *instance, const char *name)
+{
+    const CanopyBoundary *entry = canopy_compiled_find_boundary(instance->graph, name);
+    return entry && entry->kind == CANOPY_BOUNDARY_OUTLET ? entry->node : -1;
+}
+
+float canopy_instance_read_at(CanopyInstance *instance, const char *name, int64_t t)
+{
+    float value = 0.0f;
+    int32_t index;
+    if (!instance || !name || !acquire(instance)) return 0.0f;
+    canopy_instance_adopt(instance);
+    index = outlet_by_name(instance, name);
+    if (index >= 0) value = inlet_at(instance, index, 0, t);
+    release(instance);
+    return value;
+}
+
+int32_t canopy_instance_read_span(CanopyInstance *instance, const char *name, int64_t t0, int64_t t1, int64_t n, float *out)
+{
+    int32_t index;
+    int32_t status = check_span(t0, t1, n, out);
+    if (status != CANOPY_OK) return status;
+    if (!instance || !name) {
+        zero_fill(out, n);
+        return CANOPY_ERR_ARGUMENT;
+    }
+    if (!acquire(instance)) {
+        zero_fill(out, n);
+        return CANOPY_ERR_BUSY;
+    }
+    canopy_instance_adopt(instance);
+    index = outlet_by_name(instance, name);
+    if (index < 0) {
+        zero_fill(out, n);
+        status = CANOPY_ERR_NODE;
+    } else {
+        status = inlet_span(instance, index, 0, t0, t1, n, out);
+    }
+    release(instance);
+    return status;
 }
 
 int32_t canopy_instance_inlet_span(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t0, int64_t t1, int64_t n, float *out)

@@ -18,7 +18,7 @@ python run_tests.py --no-debug      # skip the second, debug-heap run of the C t
 python run_tests.py --no-asan       # skip the third, AddressSanitizer run of the C tests
 powershell -ExecutionPolicy Bypass -File build.ps1    # only the build
 python dev/mutation/mutate.py dev/mutation/step3.py   # mutation check: breaks the C code in 83 specific ways, one at a time, and requires the
-                                                      # suite to notice each (about 15 s each; add a spec file per step; step4.py has 135)
+                                                      # suite to notice each (about 15 s each; add a spec file per step; step4.py has 134, step5.py 53, step6.py 64)
 python dev/mutation/mutate.py dev/mutation/step4.py N01 P30  # only the mutations whose first word is one of these (here N01 and P30)
                                                       # (a mutation that deadlocks, like the lock ones K01 to K06, is stopped by the runner after
                                                       # CANOPY_TEST_TIMEOUT seconds, default 180: set it to 30 for such a run)
@@ -33,8 +33,11 @@ python dev/mutation/mutate.py dev/mutation/step4.py N01 P30  # only the mutation
     host calls: knobs, boundary values, actions, collect), `canopy_install.c` (records per node ID and type, generation numbers, the sources
     upstream of each node, installing a graph as a transaction, reclaiming old graphs), `canopy_package.c` (instances, and the packages that move an
     instance to a newly installed graph), `canopy_instance.c` (queries, context calls, scratch arena), `canopy_test_nodes.c` (the hidden
-    test-only node types, registered only by `canopy_registry_add_test_nodes`), `canopy_version.c`.
-  - `third_party/` vendored single headers (miniaudio.h, dr_wav.h; added at plan steps 7 and 6, each download needs the author's permission).
+    test-only node types, registered only by `canopy_registry_add_test_nodes`), `canopy_boundary.c` (the built-in boundary node types, registered
+    by `canopy_registry_new`; tests that count types use `canopy_registry_new_empty`), `canopy_fileread.c` (the file node, with dr_wav), `canopy_retire.c`
+    (retiring replaced data by per-instance epochs, and node messages), `canopy_version.c`.
+  - `third_party/` vendored single headers, kept byte for byte as downloaded (LF line endings; provenance and hashes in its README): dr_wav.h is in;
+    miniaudio.h is added at plan step 7. Each download needs the author's permission.
   - `canopysynth/` the Python package (the built `canopysynth.dll` is written into it).
   - `tests/c/` plain C: `ctest.h` (`CHECK`, `CHECK_INT`, `CHECK_HEAP`, `RUN`), `support.c/.h` (guarded output buffers, the `test.*` node types, the `Rig`
     that builds a graph, engine and instance and checks for leaks on `rig_close`), one `test_<area>.c` per area registered in `run_c_tests.c`.

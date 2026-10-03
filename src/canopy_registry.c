@@ -60,9 +60,19 @@ static void entry_free(Entry *entry)
     canopy_free(entry);
 }
 
+CanopyRegistry *canopy_registry_new_empty(void)
+{
+    return (CanopyRegistry *)canopy_alloc(sizeof(CanopyRegistry));
+}
+
 CanopyRegistry *canopy_registry_new(void)
 {
-    return (CanopyRegistry *)canopy_alloc(sizeof(CanopyRegistry));   /* the built-in node types are registered here as they are added */
+    CanopyRegistry *registry = canopy_registry_new_empty();
+    if (registry && (canopy_boundary_register_types(registry) != CANOPY_OK || canopy_fileread_register_type(registry) != CANOPY_OK)) {   /* (the other built-in node types are registered here as they are added) */
+        canopy_registry_free(registry);
+        return NULL;
+    }
+    return registry;
 }
 
 void canopy_registry_free(CanopyRegistry *registry)
@@ -173,14 +183,21 @@ static int32_t validate(CanopyRegistry *registry, const CanopyNodeType *type, in
     if (canopy_registry_find(registry, type->key)) return fail(registry, CANOPY_ERR_DUPLICATE, "a node type with the key %s is already registered%s", type->key, "");
     if (!non_empty(type->name)) return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: the display name is empty%s", type->key, "");
     if (type->type_version < 1) return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: type_version must be at least 1%s", type->key, "");
-    if (type->flags & ~(builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT) : CANOPY_FLAGS_KNOWN))      /* a flag only built-in types may set */
-        return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: unknown flag bits%s", type->key, "");
+    if (type->flags & ~(builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE) : CANOPY_FLAGS_KNOWN))
+        return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: unknown flag bits%s", type->key, "");    /* (the boundary flags are for built-in types only) */
     if (type->scratch_buffers < 0) return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: scratch_buffers is negative%s", type->key, "");
     if (type->n_inlets < 0 || type->n_outlets < 0 || type->n_settings < 0 || type->n_widgets < 0)
         return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: a negative count%s", type->key, "");
     if ((type->n_inlets && !type->inlets) || (type->n_outlets && !type->outlets) || (type->n_settings && !type->settings) ||
         (type->n_widgets && !type->widgets))
         return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: a count is above zero but its array is NULL%s", type->key, "");
+    if (type->flags & CANOPY_FLAG_BOUNDARY_NODE) {                                    /* the compiler finds the name of a boundary node by this setting */
+        int has_name = 0;
+        for (i = 0; i < type->n_settings; i++)
+            if (type->settings[i].key && strcmp(type->settings[i].key, CANOPY_BOUNDARY_NAME_KEY) == 0 && type->settings[i].kind == CANOPY_SETTING_STRING)
+                has_name = 1;
+        if (!has_name) return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: a boundary node needs a STRING setting called name%s", type->key, "");
+    }
 
     for (i = 0; i < type->n_inlets; i++) {
         const CanopyInletDesc *inlet = &type->inlets[i];

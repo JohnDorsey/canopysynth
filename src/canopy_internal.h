@@ -9,13 +9,23 @@
    built-in-only flag CANOPY_FLAG_BOUNDARY_SLOT is allowed. */
 int32_t canopy_registry_register_builtin(CanopyRegistry *registry, const CanopyNodeType *type);
 
-/* ---- boundary slots (design sections 8 and 10) ----
-   A built-in node type with this flag gets one slot in the engine's table of atomic floats, per node: a value the HOST writes (any float,
-   with a generation number bumped by every write) and the node reads with canopy_ctx_boundary_value(). Plan step 5's BoundaryInletNode is
-   such a type. Third-party registration refuses the flag. */
+/* A registry with no built-in node types in it (canopy_registry_new() has the boundary node types): for tests that count types. */
+CanopyRegistry *canopy_registry_new_empty(void);
+/* Registers the two boundary node types (canopy_boundary.c) and the file node type (canopy_fileread.c). */
+int32_t canopy_boundary_register_types(CanopyRegistry *registry);
+int32_t canopy_fileread_register_type(CanopyRegistry *registry);
+
+/* ---- boundary nodes and slots (design sections 8 and 10) ----
+   A built-in node type with CANOPY_FLAG_BOUNDARY_SLOT gets one slot in the engine's table of atomic floats, per node: a value the HOST writes
+   (any float, with a generation number bumped by every write) and the node reads with canopy_ctx_boundary_value(). BoundaryInletNode is such a
+   type. A type with CANOPY_FLAG_BOUNDARY_NODE is a boundary node (BoundaryInletNode and BoundaryOutletNode): the host addresses it by the text
+   setting `name`, which such a type must have; the compiler refuses an empty or repeated name. Third-party registration refuses both flags. */
 #define CANOPY_FLAG_BOUNDARY_SLOT 4u
+#define CANOPY_FLAG_BOUNDARY_NODE 16u
+#define CANOPY_BOUNDARY_NAME_KEY "name"
 float canopy_ctx_boundary_value(CanopyCtx *ctx);                    /* 0.0f for a node without a boundary slot */
-/* The host's write: CANOPY_ERR_NODE for an unknown node, CANOPY_ERR_ARGUMENT for a node whose type has no boundary slot. */
+/* The host's write by node ID (canopy_engine_set_boundary does it by name): CANOPY_ERR_NODE for an unknown node, CANOPY_ERR_ARGUMENT for a node
+   whose type has no boundary slot. */
 int32_t canopy_engine_set_boundary_value(CanopyEngine *engine, int64_t node_id, float value);
 
 /* ---- memory ----

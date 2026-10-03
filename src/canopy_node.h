@@ -137,6 +137,17 @@ CANOPY_API uint64_t canopy_ctx_upstream_stamp(CanopyCtx *ctx);
    the digest of every node downstream changes. Call it from on_action, or any handler, after changing the resource. */
 CANOPY_API void canopy_ctx_shared_changed(CanopyCtx *ctx);
 
+/* For a node that replaces data its queries read (a file's samples, when "open" is pressed again): publish the new data with an atomic pointer
+   swap (sequentially consistent, and read with a sequentially consistent load in the queries), then hand the OLD block to this call. `release`
+   is called with the block once no query that began before the call can still be running: at once if none is, else by the thread that installs,
+   collects or frees an instance (or when the engine is freed). Call it from on_action, create_shared or destroy_shared, never from a query;
+   `release` must not call back into the engine. A query that begins after the swap reads the new data. */
+CANOPY_API void canopy_ctx_retire(CanopyCtx *ctx, void *block, void (*release)(void *block));
+
+/* What the node says about itself: shown on the node by the editor and read by the host with canopy_engine_node_message(). Text replaces the
+   last message; an empty text clears it (a node that succeeds clears its message). Not for query handlers (it allocates). */
+CANOPY_API void canopy_ctx_set_message(CanopyCtx *ctx, const char *text);
+
 /* The node's settings, by index: the position in the descriptor's `settings` array (the internal sampling rate the registry adds comes last).
    canopy_ctx_int reads an INT setting, or the chosen index of a CHOICE setting; canopy_ctx_float a FLOAT setting; canopy_ctx_string a
    STRING or PATH setting (valid until the handler returns; never NULL). A bad index or the wrong kind returns 0, 0.0 or "". */
@@ -168,7 +179,7 @@ typedef struct CanopyNodeType {
 /* ---- the registry ---- */
 typedef struct CanopyRegistry CanopyRegistry;
 
-CANOPY_API CanopyRegistry *canopy_registry_new(void);          /* holds the built-in node types (none yet) */
+CANOPY_API CanopyRegistry *canopy_registry_new(void);          /* holds the built-in node types (the boundary nodes so far) */
 CANOPY_API void canopy_registry_free(CanopyRegistry *registry);
 
 /* Registers the hidden, test-only node types (design section 11): they are never in a registry unless this is called, so that no editor or

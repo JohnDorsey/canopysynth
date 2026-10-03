@@ -3,6 +3,7 @@
 #ifndef SUPPORT_H
 #define SUPPORT_H
 
+#include <stdatomic.h>
 #include <stdint.h>
 #include "../../src/canopy_engine.h"
 #include "../../src/canopy_internal.h"
@@ -65,11 +66,16 @@ void support_calls_reset(void);
                    Counted in support_shared_created / support_shared_destroyed.
    test.state      out = a counter in its instance state: 4, 5, 6... on successive queries of one instance. Counted in support_state_created /
                    support_state_destroyed.
+   test.retire     out = a number in its shared resource, 1 at first. Its action "swap" replaces the number with the next one and retires the old
+                   block (the release function sets it to -1, frees it and counts in support_released); "say" sets the node's message to
+                   "hello", "clear" clears it, "long" and "long_utf8" say 600 bytes (of x, of the two-byte e acute). While support_hold is set, a query inside it sets support_inside and waits, then reads the
+                   number: a block freed too early would show as -1 or a crash. Pointwise.
    test_boundary   (a built-in key: it has a boundary slot) out = the value the host last wrote with canopy_engine_set_boundary_value, 0.0 at first.
    test_filter     the hidden filter of the DLL, registered by canopy_registry_add_test_nodes (see src/canopy_test_nodes.c). */
 #define SUPPORT_TAGS 16
 extern int support_counts[SUPPORT_TAGS];
 extern uint64_t support_stamps[SUPPORT_TAGS];
+extern atomic_int support_hold, support_inside, support_released;       /* see test.retire */
 extern int support_shared_created, support_shared_destroyed, support_state_created, support_state_destroyed;
 void support_counters_reset(void);
 float support_saw(int64_t t);                                     /* the formula of test.saw, for references */

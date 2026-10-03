@@ -3,7 +3,8 @@
 Every one of them should be reported as caught; see mutate.py. (A name starting N is canopy_install.c, P canopy_package.c, F canopy_test_nodes.c,
 T canopy_time.c, I canopy_instance.c, E canopy_engine.c, R canopy_registry.c, K canopy_core.h.)
 The lock faults K01 to K05 (and K06 slowly) deadlock or crash the test program: run_tests.py stops a C test program after CANOPY_TEST_TIMEOUT
-seconds (default 180), so run those with CANOPY_TEST_TIMEOUT=30. Mutations that would loop or recurse without end are left out on purpose."""
+seconds (default 180), so run those with CANOPY_TEST_TIMEOUT=30. Mutations that would loop or recurse without end are left out on purpose.
+(E52, the lock of the internal by-ID boundary write, was dropped at step 5: only tests call it now; the host's by-name write has its own lock check, step5.py C23.)"""
 N = "src/canopy_install.c"
 P = "src/canopy_package.c"
 F = "src/canopy_test_nodes.c"
@@ -51,7 +52,7 @@ SET_GRAPH = (EXCLUSIVE_LOCK + "    status = canopy_install(engine, compiled);\n 
 COLLECT = EXCLUSIVE_LOCK + "    canopy_reclaim(engine);\n    held = engine->n_compiled;\n" + EXCLUSIVE_UNLOCK
 INSTANCE_FREE = (EXCLUSIVE_LOCK + "    for (k = 0; k < engine->n_instances; k++)\n        if (engine->instances[k] == instance) {\n"
                  "            engine->instances[k] = engine->instances[--engine->n_instances];\n            break;\n        }\n"
-                 "    instance_teardown(instance);\n"
+                 "    canopy_retire_forget(engine, instance);\n    instance_teardown(instance);\n"
                  "    canopy_reclaim(engine);                              /* the graphs and shared resources this instance was the last to need */\n"
                  + EXCLUSIVE_UNLOCK)
 
@@ -248,9 +249,9 @@ MUTATIONS = [
     ("E71 failed install gives no message", E, "    if (status == CANOPY_OK) canopy_reclaim(engine);\n    else memory_error(engine);",
      "    if (status == CANOPY_OK) canopy_reclaim(engine);"),
     # ---- registry: the boundary flag is for built-in types only ----
-    ("R10 any type may have a boundary slot", R, "builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT) : CANOPY_FLAGS_KNOWN",
-     "(CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT)"),
-    ("R11 no type may have a boundary slot", R, "builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT) : CANOPY_FLAGS_KNOWN",
+    ("R10 any type may have a boundary slot", R, "builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE) : CANOPY_FLAGS_KNOWN",
+     "(CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE)"),
+    ("R11 no type may have a boundary slot", R, "builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE) : CANOPY_FLAGS_KNOWN",
      "CANOPY_FLAGS_KNOWN"),
     # ---- the lock: a missing lock is only seen by a test that holds it itself ----
     ("K01 exclusive lock does nothing", K, "static inline void canopy_lock_exclusive(CanopyLock *lock) { AcquireSRWLockExclusive(lock); }",
@@ -275,7 +276,6 @@ MUTATIONS = [
      "static inline void canopy_unlock_shared(CanopyLock *lock) { (void)lock; }"),
     ("E50 set_knob takes no lock", E, *without(SET_KNOB, SHARED_LOCK, SHARED_UNLOCK)),
     ("E51 get_knob takes no lock", E, *without(GET_KNOB, SHARED_LOCK, SHARED_UNLOCK)),
-    ("E52 set_boundary_value takes no lock", E, *without(SET_BOUNDARY, SHARED_LOCK, SHARED_UNLOCK)),
     ("E53 action takes no lock", E, *without(ACTION, SHARED_LOCK, SHARED_UNLOCK)),
     ("E54 node_count takes no lock", E, *without(NODE_COUNT, SHARED_LOCK, SHARED_UNLOCK)),
     ("E55 graph_serial takes no lock", E, *without(GRAPH_SERIAL, SHARED_LOCK, SHARED_UNLOCK)),

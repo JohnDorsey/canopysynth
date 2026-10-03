@@ -29,7 +29,7 @@ MUTATIONS = [
     ("I11 knob fallback leaves the last sample", I, "        for (i = 0; i < n; i++) out[i] = knob;", "        for (i = 0; i < n - 1; i++) out[i] = knob;"),
     ("I12 bad inlet not zero-filled", I, "        zero_fill(out, n);\n        return CANOPY_ERR_PORT;", "        return CANOPY_ERR_PORT;"),
     ("I27 bad inlet index not checked (point)", I, "    if (inlet < 0 || inlet >= node->type->n_inlets) return 0.0f;\n", ""),
-    ("I21 unknown node not zero-filled", I, "        zero_fill(out, n);\n        status = CANOPY_ERR_NODE;", "        status = CANOPY_ERR_NODE;"),
+    ("I21 unknown node not zero-filled", I, "        zero_fill(out, n);\n        status = CANOPY_ERR_NODE;\n    } else {\n        status = inlet_span(instance, index, inlet,", "        status = CANOPY_ERR_NODE;\n    } else {\n        status = inlet_span(instance, index, inlet,"),
     # ---- scratch ----
     ("I13 declared count not enforced", I, "    if (ctx->scratch_taken >= ctx->node->type->scratch_buffers) return NULL;\n", ""),
     ("I14 no rounding to cache lines", I, "    rounded = (n + 15) & ~(int64_t)15;", "    rounded = n;"),
@@ -39,7 +39,7 @@ MUTATIONS = [
     ("I24 arena not aligned", P, "    if (block) *start = (float *)(((uintptr_t)block + 63u) & ~(uintptr_t)63u);", "    if (block) *start = (float *)block;"),
     ("I30 scratch allowed outside a query", I, "    if (!ctx || !ctx->querying) return NULL;\n    if (n < 1", "    if (!ctx) return NULL;\n    if (n < 1"),
     # ---- the busy guard and lifecycle ----
-    ("I18 busy guard always lets in", I, "    return atomic_exchange_explicit(&instance->busy, 1, memory_order_acquire) == 0;", "    (void)atomic_exchange_explicit(&instance->busy, 1, memory_order_acquire);\n    return 1;"),
+    ("I18 busy guard always lets in", I, "    if (atomic_exchange_explicit(&instance->busy, 1, memory_order_acquire) != 0) return 0;\n", "    (void)atomic_exchange_explicit(&instance->busy, 1, memory_order_acquire);\n"),
     ("I19 busy flag never released", I, "    atomic_store_explicit(&instance->busy, 0, memory_order_release);", "    (void)instance;"),
     ("I22 instance free skips destroy_instance", P, "            if (instance->states[i] && handlers->destroy_instance) {", "            if (instance->states[i] && handlers->destroy_instance && i < 0) {"),
     ("I25 ctx_state always NULL", I, "    return ctx ? ctx->state : NULL;", "    (void)ctx;\n    return NULL;"),

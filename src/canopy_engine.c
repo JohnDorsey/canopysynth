@@ -335,6 +335,57 @@ done:
     return status;
 }
 
+static int compare_boundary(const void *a, const void *b)
+{
+    return strcmp(((const CanopyBoundary *)a)->name, ((const CanopyBoundary *)b)->name);
+}
+
+/* The boundary nodes sorted by name; a name that is empty, or used by two nodes of either kind, is a fault. */
+static int32_t build_boundary(CanopyEngine *engine, CanopyCompiled *c)
+{
+    int32_t i, count = 0, k = 0;
+    for (i = 0; i < c->n_nodes; i++)
+        if (c->nodes[i].type->flags & CANOPY_FLAG_BOUNDARY_NODE) count++;
+    if (count == 0) return CANOPY_OK;
+    c->boundary = (CanopyBoundary *)canopy_pool_alloc(&c->pool, (size_t)count * sizeof *c->boundary);
+    if (!c->boundary) return memory_error(engine);
+    for (i = 0; i < c->n_nodes; i++) {
+        const CanopyCNode *node = &c->nodes[i];
+        if (node->type->flags & CANOPY_FLAG_BOUNDARY_NODE) {
+            int32_t setting = find_setting(node->type, CANOPY_BOUNDARY_NAME_KEY);       /* (the registry made sure there is one) */
+            const char *name = node->settings[setting].s;
+            if (name[0] == '\0')
+                return GRAPH_ERROR(engine, "node %lld (%s) is a boundary node and needs a name", LL(node->id), node->type->key);
+            c->boundary[k].name = name;
+            c->boundary[k].node = i;
+            c->boundary[k].kind = (node->type->flags & CANOPY_FLAG_BOUNDARY_SLOT) ? CANOPY_BOUNDARY_INLET : CANOPY_BOUNDARY_OUTLET;
+            k++;
+        }
+    }
+    c->n_boundary = count;
+    qsort(c->boundary, (size_t)count, sizeof *c->boundary, compare_boundary);
+    for (i = 1; i < count; i++)
+        if (strcmp(c->boundary[i].name, c->boundary[i - 1].name) == 0) {
+            int32_t first = c->boundary[i - 1].node < c->boundary[i].node ? c->boundary[i - 1].node : c->boundary[i].node;
+            int32_t second = c->boundary[i - 1].node < c->boundary[i].node ? c->boundary[i].node : c->boundary[i - 1].node;
+            return GRAPH_ERROR(engine, "the boundary name \"%s\" is used by node %lld and by node %lld; boundary names must be unique",
+                               c->boundary[i].name, LL(c->nodes[first].id), LL(c->nodes[second].id));
+        }
+    return CANOPY_OK;
+}
+
+const CanopyBoundary *canopy_compiled_find_boundary(const CanopyCompiled *graph, const char *name)
+{
+    int32_t lo = 0, hi = graph->n_boundary - 1;
+    while (lo <= hi) {
+        int32_t mid = lo + (hi - lo) / 2;
+        int order = strcmp(graph->boundary[mid].name, name);
+        if (order == 0) return &graph->boundary[mid];
+        if (order < 0) lo = mid + 1; else hi = mid - 1;
+    }
+    return NULL;
+}
+
 static int32_t compile(CanopyEngine *engine, const CanopyGraph *graph, CanopyCompiled **result)
 {
     int32_t status;
@@ -344,6 +395,7 @@ static int32_t compile(CanopyEngine *engine, const CanopyGraph *graph, CanopyCom
     if (status == CANOPY_OK) status = apply_settings(engine, graph, c);
     if (status == CANOPY_OK) status = apply_knobs(engine, graph, c);
     if (status == CANOPY_OK) status = apply_connections(engine, graph, c);
+    if (status == CANOPY_OK) status = build_boundary(engine, c);
     if (status == CANOPY_OK) status = compute_arena(engine, c);
     if (status != CANOPY_OK) {
         canopy_compiled_release(c);
@@ -363,6 +415,8 @@ CanopyEngine *canopy_engine_new(const CanopyRegistry *registry)
     if (!engine) return NULL;
     engine->registry = registry;
     InitializeSRWLock(&engine->lock);
+    InitializeSRWLock(&engine->retire_lock);
+    InitializeSRWLock(&engine->message_lock);
     return engine;
 }
 
@@ -497,6 +551,59 @@ int32_t canopy_engine_set_boundary_value(CanopyEngine *engine, int64_t node_id, 
     if (!node) status = CANOPY_ERR_NODE;
     else if (!(node->type->flags & CANOPY_FLAG_BOUNDARY_SLOT)) status = CANOPY_ERR_ARGUMENT;
     else canopy_slot_write(&node->record->boundary, value);                  /* any float: nothing is clamped on the way in */
+    canopy_unlock_shared(&engine->lock);
+    return status;
+}
+
+int32_t canopy_engine_set_boundary(CanopyEngine *engine, const char *name, float value)
+{
+    const CanopyCompiled *graph;
+    const CanopyBoundary *entry;
+    int32_t status = CANOPY_OK;
+    if (!engine || !name) return CANOPY_ERR_ARGUMENT;
+    canopy_lock_shared(&engine->lock);
+    graph = atomic_load_explicit(&engine->current, memory_order_acquire);
+    entry = graph ? canopy_compiled_find_boundary(graph, name) : NULL;
+    if (!entry || entry->kind != CANOPY_BOUNDARY_INLET) status = CANOPY_ERR_NODE;
+    else canopy_slot_write(&graph->nodes[entry->node].record->boundary, value);          /* any float: nothing is clamped on the way in */
+    canopy_unlock_shared(&engine->lock);
+    return status;
+}
+
+int32_t canopy_engine_boundary_count(CanopyEngine *engine)
+{
+    const CanopyCompiled *graph;
+    int32_t count;
+    if (!engine) return 0;
+    canopy_lock_shared(&engine->lock);
+    graph = atomic_load_explicit(&engine->current, memory_order_acquire);
+    count = graph ? graph->n_boundary : 0;
+    canopy_unlock_shared(&engine->lock);
+    return count;
+}
+
+int32_t canopy_engine_boundary_at(CanopyEngine *engine, int32_t index, char *name, int32_t name_capacity, int32_t *name_length,
+                                  int32_t *kind, int64_t *node_id)
+{
+    const CanopyCompiled *graph;
+    int32_t status = CANOPY_OK;
+    if (!engine || name_capacity < 0 || (name_capacity > 0 && !name)) return CANOPY_ERR_ARGUMENT;
+    canopy_lock_shared(&engine->lock);
+    graph = atomic_load_explicit(&engine->current, memory_order_acquire);
+    if (!graph || index < 0 || index >= graph->n_boundary) {
+        status = CANOPY_ERR_INDEX;
+    } else {
+        const CanopyBoundary *entry = &graph->boundary[index];
+        size_t length = strlen(entry->name);
+        if (name_capacity > 0) {
+            size_t copied = length < (size_t)name_capacity - 1 ? length : (size_t)name_capacity - 1;
+            memcpy(name, entry->name, copied);
+            name[copied] = '\0';
+        }
+        if (name_length) *name_length = (int32_t)length;
+        if (kind) *kind = entry->kind;
+        if (node_id) *node_id = graph->nodes[entry->node].id;
+    }
     canopy_unlock_shared(&engine->lock);
     return status;
 }

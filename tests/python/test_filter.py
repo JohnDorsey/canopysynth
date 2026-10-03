@@ -209,16 +209,18 @@ def test_py_instances_in_other_threads_get_exact_answers_while_graphs_are_instal
     for thread in threads:
         thread.start()
     deadline = time.time() + 60
-    for step in range(60):                                                       # the same graph again, from step 20 with an extra node
-        if step == 20:
-            rig.node(60, "py.saw")
-        rig.update()
-        e.engine_collect(rig.engine)
-        while min(answered) < step * 4 and time.time() < deadline:              # let every worker make progress between installs
-            time.sleep(0.0005)
-    stop.set()
-    for thread in threads:
-        thread.join()
+    try:
+        for step in range(60):                                                   # the same graph again, from step 20 with an extra node
+            if step == 20:
+                rig.node(60, "py.saw")
+            rig.update()
+            e.engine_collect(rig.engine)
+            while min(answered) < step * 4 and time.time() < deadline:          # let every worker make progress between installs
+                time.sleep(0.0005)
+    finally:                                                                     # whatever happens, the workers must stop
+        stop.set()
+        for thread in threads:
+            thread.join()
     assert not problems, problems[:3]
     assert min(answered) >= 200, answered
     assert e.engine_collect(rig.engine) > 1                                      # the rig's own instance has not been asked yet: it holds the old graphs

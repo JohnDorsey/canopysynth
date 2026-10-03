@@ -267,6 +267,7 @@ void canopy_instance_free(CanopyInstance *instance)
             engine->instances[k] = engine->instances[--engine->n_instances];
             break;
         }
+    canopy_retire_forget(engine, instance);
     instance_teardown(instance);
     canopy_reclaim(engine);                              /* the graphs and shared resources this instance was the last to need */
     canopy_unlock_exclusive(&engine->lock);

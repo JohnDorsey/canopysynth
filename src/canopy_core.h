@@ -100,6 +100,8 @@ static inline uint64_t canopy_mix(uint64_t h, uint64_t v)
     return h;
 }
 
+#define CANOPY_MESSAGE_BYTES 256        /* a node's message is cut to 255 bytes (at a character boundary): it can always be stored, also when memory has run out */
+
 /* ---- records: what survives installing another graph, per node ID and node type (canopy_install.c) ---- */
 
 struct CanopyCNode;
@@ -118,6 +120,8 @@ typedef struct CanopyNodeRecord {
     const struct CanopyCNode *published;   /* this node in the installed graph (NULL before the first install that has it) */
     int32_t refs;                      /* the compiled graphs still held that contain it */
     int fresh;                         /* made by the install in progress */
+    struct CanopyEngine *engine;       /* the engine it belongs to */
+    char message[CANOPY_MESSAGE_BYTES];   /* what the node last said about itself (canopy_ctx_set_message), "" for nothing; guarded by the engine's message lock */
 } CanopyNodeRecord;
 
 /* ---- the compiled graph (built in canopy_engine.c and canopy_install.c, immutable once installed) ---- */
@@ -141,17 +145,23 @@ typedef struct CanopyCNode {
     uint64_t cone_static;              /* a digest of what is upstream (identities, wiring) and of the setting generations */
 } CanopyCNode;
 
+typedef struct { const char *name; int32_t node; int32_t kind; } CanopyBoundary;    /* kind: CANOPY_BOUNDARY_INLET or _OUTLET; node: index in nodes[] */
+
 typedef struct CanopyCompiled {
     CanopyPool pool;                   /* owns every array above */
     uint64_t serial;                   /* increases with every install (a failed one uses up a number): 1, 2, 3... when none has failed */
     int32_t n_nodes;
     CanopyCNode *nodes;                /* sorted by id */
+    int32_t n_boundary;
+    CanopyBoundary *boundary;          /* the boundary nodes, sorted by name (names are non-empty and unique) */
     int64_t arena_floats;              /* the size of one instance's scratch arena */
     int32_t has_cycle;
 } CanopyCompiled;
 
 /* The node with this id (binary search); NULL if there is none. *index (may be NULL) is its position in nodes[]. */
 const CanopyCNode *canopy_compiled_find(const CanopyCompiled *graph, int64_t id, int32_t *index);
+/* The boundary node with this name (binary search); NULL if there is none. */
+const CanopyBoundary *canopy_compiled_find_boundary(const CanopyCompiled *graph, const char *name);
 
 /* ---- instances, and the packages that move them to a newly installed graph (canopy_instance.c) ----
    Installing a graph prepares, for every live instance, a package: everything the instance needs to run the new graph, built by the
@@ -178,6 +188,7 @@ typedef struct CanopyPackage {
 struct CanopyInstance {
     CanopyEngine *engine;
     atomic_int busy;
+    atomic_uint_fast64_t epoch;        /* odd while a host query runs in this instance, even between them; read by the thread that retires data */
     /* used by the thread that queries (and read by the installing thread only through the atomics of the packages) */
     const CanopyCompiled *graph;
     void **states;                     /* one per node: what create_instance returned */
@@ -202,6 +213,9 @@ struct CanopyEngine {
     CanopyInstance **instances;        int32_t n_instances, cap_instances;  /* the live instances */
     uint64_t serial;                   /* the serial of the newest graph made */
     uint64_t uid;                      /* the last record uid given */
+    CanopyLock retire_lock;            /* guards `retired` (taken after the engine lock, never before it) */
+    struct CanopyRetired *retired;     /* data given up by nodes, waiting until no query that began before can still be reading it */
+    CanopyLock message_lock;           /* guards the `message` of every record */
     char error[400];
 };
 
@@ -210,6 +224,10 @@ int32_t canopy_install(CanopyEngine *engine, CanopyCompiled *compiled);      /* 
 void canopy_reclaim(CanopyEngine *engine);                                    /* frees what no instance can use any more */
 void canopy_free_graph(CanopyEngine *engine, CanopyCompiled *compiled);
 void canopy_compiled_release(CanopyCompiled *compiled);                      /* frees a compiled graph that holds no record references */
+
+/* canopy_retire.c (the engine's lock held, shared or exclusive) */
+void canopy_retire_collect(CanopyEngine *engine);                             /* frees the retired data that no query can still be reading */
+void canopy_retire_forget(CanopyEngine *engine, CanopyInstance *instance);    /* an instance is going: nothing waits for it any more */
 
 /* canopy_package.c: the thread that queries applies the packages that were prepared for its instance (no allocation, no lock) */
 void canopy_instance_adopt(CanopyInstance *instance);

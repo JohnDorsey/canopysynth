@@ -1,6 +1,6 @@
 # CANOPY - build plan for version 1
 
-Created 2026-10-02. Status: **in progress** (steps 0 to 4 done).
+Created 2026-10-02. Status: **in progress** (steps 0 to 6 done).
 The design is `docs/canopy_design.md` (read it before every step). This plan builds exactly that design and nothing else.
 The project folder is `C:\Users\Argh\Documents\ai\projects\canopysynth`; the design and this plan live in its `docs\` folder.
 
@@ -141,13 +141,57 @@ Choices of mine that the design leaves open (the author may veto any of them):
     a chain that is about N^2/2 entries (measured below). Real graphs have tens of nodes. If graphs ever get large a bitset per node would cut the
     memory about twentyfold; not done.
 
+## Decisions recorded at step 5 (asked and answered 2026-10-02)
+
+Answered by the author:
+- The C host calls are **by name only** (no separate resolve call): `canopy_engine_set_boundary`, `canopy_engine_boundary_count`,
+  `canopy_engine_boundary_at`, `canopy_instance_read_at`, `canopy_instance_read_span`.
+- A boundary name is **any non-empty text, unique** across both kinds, case-sensitive, compared byte for byte.
+
+Choices of mine that the design leaves open (the author may veto any of them):
+1. `canopy_engine_boundary_at` copies the name out (buffer, capacity, full length returned) instead of returning a struct with a pointer: a pointer
+   into the compiled graph would dangle after the next install. The listing is sorted by name in byte order (capitals first); count and `at` are two
+   calls, so an install between them can make `at` return `CANOPY_ERR_INDEX`.
+2. A name that is unknown, or of the wrong kind (writing an outlet, reading an inlet), is `CANOPY_ERR_NODE` (a point read gives 0.0); a NULL name is
+   `CANOPY_ERR_ARGUMENT`. No new status code.
+3. A boundary value belongs to the node (its record), not to its name: renaming a node keeps the value; a node that leaves the graph and later comes
+   back (after the engine let go of the old graphs) starts at 0.0 again. A graph description does not carry boundary values.
+4. A reader finds its outlet by name in the graph the instance runs (after adopting a newly installed one), so a read never uses a name from a graph
+   the instance has not reached.
+5. `canopy_registry_new()` now returns a registry with the boundary types in it (and NULL if registering them runs out of memory); the type flag
+   `CANOPY_FLAG_BOUNDARY_NODE` (16) is built-in only like the slot flag.
+
+## Decisions recorded at step 6 (asked and answered 2026-10-03)
+
+Answered by the author:
+- **dr_wav.h may be downloaded** (done: 369,705 bytes from the dr_libs master, public domain / MIT-0; provenance in `third_party/README.md`).
+- **Replaced samples are retired and freed when no query can see them** (epoch per instance, two atomic increments per host query, no locks).
+- **A generic node message**: `canopy_ctx_set_message` / `canopy_engine_node_message`, which later nodes (the preview's device errors) reuse.
+- **The file is read at creation and on "open"**: when the node first appears in an installed graph, and whenever the action "open" is pressed (using
+  the path of the installed graph); installing a graph with another path does not reload.
+
+Choices of mine that the design leaves open (the author may veto any of them):
+1. **Time**: frame k of the file is at k / (sample rate) seconds, the file starting at t = 0; the file covers t = 0 to the time of its last frame and
+   everything outside is silence (no ramp to zero at the edges). A point between frames is the linear interpolation with the position between them
+   exact. A span is the point query at each sample time (so resampling is linear interpolation both ways; decimating aliases, as the design accepts).
+2. **Integer samples** are converted by dr_wav: 16, 24 and 32 bits divide by 2^15, 2^23 and 2^31; 8-bit PCM (unsigned in WAV) maps 0..255 to -1..1
+   (255 is +1, 128 is a little above 0), dr_wav's own rule.
+3. **Messages**: "file not found: path", "not a file: path", "not a WAV file, or damaged: path", "format not supported (...); accepted: ...", "the
+   path must be absolute...", "no file chosen" (open with an empty path), "out of memory loading path". At most 255 bytes. A node that succeeds clears
+   its message. A graph loaded with a missing file is silent and flagged (message set at creation), as design section 14 asks.
+4. **A file shorter than its header says** is used as far as it goes; a file of zero frames is silence with no message; a sample rate outside
+   1 .. 9,223,372,036 Hz (`CANOPY_MAX_HELPER_RATE`) is refused; a header that claims more data than the file holds is clamped by dr_wav.
+5. **Paths** are UTF-8 text converted to wide characters (so non-ASCII names work); "absolute" means a drive letter or a UNC prefix.
+6. **Retiring is for any node**, not only this one (`canopy_ctx_retire` in `canopy_node.h`), so later nodes that swap data (the preview's buffers)
+   use the same mechanism. Cost: two sequentially consistent increments per host query. If retiring runs out of memory for its note, it waits for the
+   running queries itself (the editing thread spins) instead of leaking or freeing early.
+
 ## Questions still to ask, and where
 
 (Answered at step 2: atomics = C11 stdatomic; no Python tier in version 1. Answered at step 4: how an instance adopts a new graph.)
 
 | Question | Step |
 |---|---|
-| How a node replaces data that other threads may be reading (the loaded file, when "open" is pressed again) and frees the old data safely | 6 |
 | Package distribution format for the prebuilt DLL (wheel, a plain folder...) | 14 |
 | How the preview node's run-time list of audio devices is supplied to a CHOICE widget | 7 |
 
@@ -292,21 +336,80 @@ Choices of mine that the design leaves open (the author may veto any of them):
   practice (nothing slow runs there yet).
 - Done: 157 passed, 0 failed (129 C tests, each run three times, plus 28 Python tests).
 
-### Step 5 - boundary nodes. Recommended effort: MEDIUM-HIGH
-- [ ] BoundaryInletNode (any float, atomic store, same value for any t) and BoundaryOutletNode (reads through its inlet; knob when unconnected);
-      unique names; listing by name and kind. (The mechanism exists since step 4: the built-in-only type flag `CANOPY_FLAG_BOUNDARY_SLOT`, a slot
-      with a generation number in each node's record, `canopy_engine_set_boundary_value(engine, node_id, value)` and `canopy_ctx_boundary_value(ctx)`,
-      internal and tested with a test-only type. This step adds the two node types, their names, the by-name calls a host uses and the duplicate-name
-      fault. ASK FIRST: the C names and signatures of the host calls (write by name, read by name at a time or over a span, list), and the rules for
-      a name; the Python names are in design section 15.)
-- Done when: a host write is visible to queries that start after it, from another thread; duplicate names are a compile error.
+### Step 5 - boundary nodes. Recommended effort: MEDIUM-HIGH - DONE (build 6)
+- [x] Asked and decided (see "Decisions recorded at step 5"): the C host calls, by name only; a name is any non-empty text, unique.
+- [x] `src/canopy_boundary.c`: the built-in types `boundary_inlet` (outlet `out`; the value the host wrote, for any t, point and span; any float) and
+      `boundary_outlet` (inlet `in`, knob when unconnected, no outlet, no handler), both with the text setting `name` (empty at first) and a text
+      widget for it. Every registry made by `canopy_registry_new()` has them (`canopy_registry_new_empty()` is for tests that count types).
+- [x] Compile: a boundary node (type flag `CANOPY_FLAG_BOUNDARY_NODE`, built-in only; the registry insists it has a STRING setting `name`) whose name
+      is empty, or a name used by two nodes of either kind, is a `CANOPY_ERR_GRAPH` fault naming the node(s); the compiled graph keeps the boundary
+      nodes sorted by name for binary search.
+- [x] Host calls (`canopy_engine.h`): `canopy_engine_set_boundary(engine, name, value)` (an atomic store into the node's slot, bumping its
+      generation number; any thread), `canopy_engine_boundary_count`, `canopy_engine_boundary_at(engine, index, name, capacity, &length, &kind,
+      &node_id)`, `canopy_instance_read_at(instance, name, t)` and `canopy_instance_read_span(instance, name, t0, t1, n, out)`.
+- [x] Tests: `tests/c/test_boundary.c` (12 tests: the types, writing and reading, any float, through a graph, knob fallback, every refusal,
+      every kind of bad name, any text as a name, the listing, what a value belongs to, a new graph adopted before the name is looked up, a writer
+      against three readers), `tests/python/test_boundary.py` (5 tests through ctypes, with Python in the middle of the graph), the lock test in
+      `test_swap.c` now also tries the by-name write and the listing; `dev/mutation/step5.py`.
+- Verified (ran it): `python run_tests.py`: 178 passed, 0 failed: 145 C tests, each run three times (normal, debug heap, AddressSanitizer), plus 33
+  Python tests. The mutation check on the new code, `dev/mutation/step5.py` (53 deliberate faults in the node types, the registry, the name check, the
+  by-name write, the listing and the reads), each followed by the whole suite: all detected, 6 of them only by a crash. The first run found gaps in my
+  tests, now closed: a registry that runs out of memory while getting its built-in types was never tested; nothing refused a plug-in type with the
+  boundary-node flag or a boundary-node type without a text `name`; a lookup that matched a prefix of a name went unnoticed; the generation number of
+  a by-name write was not checked; a span read as the first query after an install was not tested; the lock test did not try the listing call by
+  itself. Two faults of mine in the spec (a lock removed without its unlock) and two that did not compile were rewritten. The older specs (step 3
+  and 4) still match the code (three entries re-pointed) and the affected faults of step 4 and 3 were re-run: caught. The C program ran 40 times in a
+  row and the boundary Python tests 5 times: no failure.
+  Found on the way: a Python thread test whose assertion failed left its reader threads running, so the process never ended and a mutation run hung for
+  ever; the thread tests now stop their threads in a `finally`, and `run_tests.py` ends a Python test that runs over 30 s (the C programs: 180 s).
+- Believed, not verified: that a host with many boundary nodes is fine (the lookup is a binary search, not measured); the Python names and the
+  `QueryError`/`GraphError` mapping are step 9's.
+- Done: 178 passed, 0 failed (145 C tests, each run three times, plus 33 Python tests).
 
-### Step 6 - FileReadNode. Recommended effort: HIGH
-- [ ] dr_wav loading of PCM 8/16/24/32 and float32; the whole file in memory as a shared resource; reload only on "open"; absolute path setting.
-- [ ] Two outlets `left`/`right` (mono feeds both; more than two channels use the first two); silence outside the file; linear interpolation for
-      point queries; resampling for span queries of any density; refusing other formats with a message.
-- [ ] Tests with generated WAV files of every accepted format, plus a refused one; the missing-file behaviour of design section 16.
-- Done when: values match an independent reference at many times and densities, including off-grid times and the file's edges.
+### Step 6 - FileReadNode. Recommended effort: HIGH - DONE (build 7)
+- [x] Asked and decided (see "Decisions recorded at step 6"): the download of dr_wav.h, how replaced samples are freed, how a node shows a message, when
+      the file is read.
+- [x] `third_party/dr_wav.h` (v0.14.6, 369,705 bytes, SHA-256 in `third_party/README.md`), compiled only in `src/canopy_fileread.c`, allocating
+      through `canopy_alloc`.
+- [x] Retiring data (`src/canopy_retire.c`): `canopy_ctx_retire(ctx, block, release)`: every host query makes its instance's epoch odd for its
+      duration; retiring records the instances that are inside a query and frees the block once each has left it (at once when none is; later by the
+      thread that installs, collects or frees an instance); nothing is locked, allocated or freed in a query. If there is no memory to note who to wait
+      for, the call waits for the queries itself.
+- [x] Node messages: `canopy_ctx_set_message(ctx, text)` (kept in the node's record, at most 255 bytes, cut at a character boundary, never needs
+      memory) and `canopy_engine_node_message(engine, node_id, buffer, capacity, &length)`.
+- [x] `file_read` (built in, in every registry): path setting `path`, button "Open...", outlets `left` and `right`; PCM 8, 16, 24, 32 and float32 through
+      dr_wav; mono feeds both; more than two channels use the first two; silence outside the file; linear interpolation (spans: the point query at each
+      sample time); loaded at creation and on the action "open" only; a failed load keeps the old file and puts a message on the node; a good one
+      clears the message, replaces the samples with one atomic swap, retires the old ones and calls `canopy_ctx_shared_changed`.
+- [x] Tests: `tests/python/test_fileread.py` (generated WAV files of every format against an independent model: bit-exact interpolation at grid and
+      off-grid times and beyond the edges, spans of any density and direction, mono/3-channel/1-frame/empty files, every refusal and its message, a
+      failed open keeping the old file, when the file is read, UTF-8 paths, a file shorter than its header says), `tests/c/test_retire.c` (data kept
+      while a query may read it, freed when it is over, a later query does not hold it back, an instance freed meanwhile, no memory, messages),
+      `tests/c/test_fileread.c` (300 replacements of the file under three reader threads, out-of-memory sweeps of "open" and of installing a graph
+      with a file, the stamp downstream, queries allocate nothing); `dev/mutation/step6.py`.
+- Verified (ran it): `python run_tests.py`: 200 passed, 0 failed: 161 C tests, each run three times (normal, debug heap, AddressSanitizer), plus 39 Python
+  tests. The mutation check on the new code, `dev/mutation/step6.py` (64 deliberate faults in retiring, the epochs, messages, loading, the node and its
+  answers), each followed by the whole suite: all detected, 6 of them only by a crash. The first run (65 faults) found gaps in my tests, now closed:
+  retiring with no engine; a good open after a failed one not clearing the message; a span of a node with no file; the registry entry of the node
+  (button, outlets, setting); that any action other than "open" must not read the file. Three faults of mine in the spec did not compile and were
+  rewritten, one (a file shorter than its header says) is equivalent because dr_wav already clamps the frame count, and was dropped; that clamping is
+  itself tested with a header that claims 4 GB in a 40-byte file. The older specs were re-run on the new code in three parallel copies of the project
+  (the host entries changed): step 3 all 83 caught, step 4 133 of 134 (the one left, the lock of the internal by-ID boundary write, is only called by
+  tests since step 5 and was dropped), step 5 all 53; three entries whose text moved were re-pointed first.
+  Measured (throwaway programs, optimised build, quiet machine): a host query of a bare inlet costs 5.0 to 5.7 ns without the two epoch increments and
+  5.3 to 6.3 ns with them (the difference is inside the noise, under 1 ns); the file node: loading a 10 s stereo float file at 48 kHz (3.8 MB) takes
+  5.5 ms, pressing open again 1.4 ms, a span of 512 samples at the file's own density 4.8 ns per sample, a point query 13 ns.
+  The stress: 300 replacements of the file under three reader threads (under AddressSanitizer too: no read of freed memory); a query held inside a
+  handler keeps the replaced samples alive, a query that begins after the swap does not; the fallback when retiring has no memory to note who to wait
+  for blocks until the running query ends.
+  Found on the way: a Python thread test whose reader threads outlived a failed assertion hung the whole run (fixed with `finally`, and the runner now
+  ends a Python test after 30 s); and a message that had to be allocated could not be stored when memory had run out, exactly when a node most needs
+  to say "out of memory": messages now live in a 256-byte buffer in the node's record.
+- Believed, not verified: that the ordering of the epoch increments and the pointer swap is right on CPUs other than x64 (all of them sequentially
+  consistent, reasoned through as the usual store-load pattern; only x64 has been run); dr_wav's robustness against deliberately hostile files (no
+  fuzzing; it clamps sizes, and an allocation that fails is reported as "out of memory"); that files of hundreds of MB are fine (the whole file is
+  read in one go on the thread that presses open; 3.8 MB takes 5.5 ms, so a 1 GB file would take about 1.5 s there).
+- Done: 200 passed, 0 failed (161 C tests, each run three times, plus 39 Python tests).
 
 ### Step 7 - realtime preview node and audio device. Recommended effort: MAX
 - [ ] miniaudio device ownership in C; play, pause, a settable time, device selection by name (default if missing), 48000 Hz, chunks of at most
@@ -390,8 +493,8 @@ Choices of mine that the design leaves open (the author may veto any of them):
 | 2 | done (build 3) | registry + descriptor + status codes + version checks; decisions recorded |
 | 3 | done (build 4) | graph, engine, instances, queries, scratch arena; 84 deliberate faults all detected; debug-heap run; two design questions for steps 4 and 6 recorded |
 | 4 | done (build 5) | generation numbers and stamps, records per node ID and type, compile-and-swap by packages prepared by the editing thread, the engine's lock, the hidden filter; 135 deliberate faults all detected (5 gaps in my tests found and closed on the way), the 83 faults of step 3 re-run on the new code; the C tests now also run under AddressSanitizer; decisions recorded, known limits measured |
-| 5 | not started | |
-| 6 | not started | |
+| 5 | done (build 6) | boundary inlet and outlet types, unique non-empty names, host calls by name, listing; mutation-checked; registry now holds the built-in types |
+| 6 | done (build 7) | dr_wav vendored; retiring of replaced data with per-instance epochs; node messages; the file_read node; mutation-checked |
 | 7 | not started | |
 | 8 | not started | |
 | 9 | not started | |

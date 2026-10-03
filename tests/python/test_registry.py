@@ -83,8 +83,9 @@ def test_py_the_ctypes_descriptor_has_the_same_size_as_the_c_struct():
 def test_py_a_descriptor_registered_from_python_reads_back_with_all_its_metadata_and_the_added_internal_rate_setting():
     registry = dll.canopy_registry_new()
     try:
+        base = dll.canopy_registry_count(registry)                  # the built-in node types are in a new registry already
         made = Made()
-        assert made.register(registry) == OK and dll.canopy_registry_count(registry) == 1
+        assert made.register(registry) == OK and dll.canopy_registry_count(registry) == base + 1
         info = d.read_node_type(dll.canopy_registry_find(registry, b"python.thing"))
         assert info["key"] == "python.thing" and info["name"] == "Python Thing" and info["type_version"] == 2
         assert info["realtime_safe"] and info["has_internal_rate"]
@@ -97,7 +98,7 @@ def test_py_a_descriptor_registered_from_python_reads_back_with_all_its_metadata
             ("button", "Open", None, "open"), ("choice", "Mode", "mode", None)]
         assert info["scratch_buffers"] == 3
         assert info["handlers"]["query_at"] and not info["handlers"]["query_span"] and not info["handlers"]["create_shared"]
-        same = dll.canopy_registry_at(registry, 0)
+        same = dll.canopy_registry_at(registry, base)
         assert d.read_node_type(same) == info
     finally:
         dll.canopy_registry_free(registry)
@@ -106,6 +107,7 @@ def test_py_a_descriptor_registered_from_python_reads_back_with_all_its_metadata
 def test_py_the_registry_refuses_bad_registrations_with_the_documented_codes_and_a_message():
     registry = dll.canopy_registry_new()
     try:
+        base = dll.canopy_registry_count(registry)
         assert Made("nodots").register(registry) == ERR_KEY
         assert Made("Vendor.Thing").register(registry) == ERR_KEY
         assert Made("python.ok").register(registry) == OK
@@ -117,7 +119,7 @@ def test_py_the_registry_refuses_bad_registrations_with_the_documented_codes_and
         bad_name = Made("python.noname")
         bad_name.type.name = b""
         assert bad_name.register(registry) == ERR_DESCRIPTOR
-        assert dll.canopy_registry_count(registry) == 1
+        assert dll.canopy_registry_count(registry) == base + 1
         for code in range(15):                          # 0 .. CANOPY_ERR_BUSY (14), the last status code
             assert len(dll.canopy_status_message(code)) > 3
         assert dll.canopy_status_message(15) == b"unknown status code"

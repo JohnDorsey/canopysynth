@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <windows.h>
 #include <string.h>
 #include "support.h"
 
@@ -203,12 +204,16 @@ static int32_t failing_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t 
 int support_counts[SUPPORT_TAGS];
 uint64_t support_stamps[SUPPORT_TAGS];
 int support_shared_created, support_shared_destroyed, support_state_created, support_state_destroyed;
+atomic_int support_hold, support_inside, support_released;
 
 void support_counters_reset(void)
 {
     memset(support_counts, 0, sizeof support_counts);
     memset(support_stamps, 0, sizeof support_stamps);
     support_shared_created = support_shared_destroyed = support_state_created = support_state_destroyed = 0;
+    atomic_store(&support_hold, 0);
+    atomic_store(&support_inside, 0);
+    atomic_store(&support_released, 0);
 }
 
 #define SAW_PERIOD 250000000LL
@@ -318,6 +323,67 @@ static float state_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
     int *counter = (int *)canopy_ctx_state(ctx);
     (void)outlet; (void)t;
     return counter ? (float)(++*counter) : -1.0f;
+}
+
+typedef struct { _Atomic(int *) data; } RetireShared;
+
+static void *retire_create_shared(CanopyCtx *ctx)
+{
+    RetireShared *shared = (RetireShared *)calloc(1, sizeof *shared);
+    int *number = (int *)malloc(sizeof(int));
+    (void)ctx;
+    *number = 1;
+    atomic_store(&shared->data, number);
+    support_shared_created++;
+    return shared;
+}
+
+static void retire_destroy_shared(CanopyCtx *ctx, void *shared)
+{
+    (void)ctx;
+    free(atomic_load(&((RetireShared *)shared)->data));
+    free(shared);
+    support_shared_destroyed++;
+}
+
+static void retire_release(void *block)
+{
+    *(int *)block = -1;
+    free(block);
+    atomic_fetch_add(&support_released, 1);
+}
+
+static float retire_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+{
+    RetireShared *shared = (RetireShared *)canopy_ctx_shared(ctx);
+    int *number = atomic_load(&shared->data);
+    (void)outlet; (void)t;
+    if (atomic_load(&support_hold)) {
+        atomic_store(&support_inside, 1);
+        while (atomic_load(&support_hold)) Sleep(0);
+    }
+    return (float)*number;
+}
+
+static void retire_action(CanopyCtx *ctx, const char *action)
+{
+    RetireShared *shared = (RetireShared *)canopy_ctx_shared(ctx);
+    if (strcmp(action, "swap") == 0) {
+        int *old = atomic_load(&shared->data), *fresh = (int *)malloc(sizeof(int));
+        *fresh = *old + 1;
+        old = atomic_exchange(&shared->data, fresh);
+        canopy_ctx_retire(ctx, old, retire_release);
+    } else if (strcmp(action, "say") == 0) {
+        canopy_ctx_set_message(ctx, "hello");
+    } else if (strcmp(action, "clear") == 0) {
+        canopy_ctx_set_message(ctx, "");
+    } else if (strcmp(action, "long") == 0 || strcmp(action, "long_utf8") == 0) {      /* 600 bytes: of x, or of the two-byte e acute */
+        char text[601];
+        int i, utf8 = action[4] != 0;
+        for (i = 0; i < 600; i++) text[i] = utf8 ? (char)((i & 1) ? 0xA9 : 0xC3) : 'x';
+        text[600] = 0;
+        canopy_ctx_set_message(ctx, text);
+    }
 }
 
 static float boundary_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
@@ -466,6 +532,12 @@ CanopyRegistry *support_registry(void)
     t.n_outlets = 1; t.outlets = OUT_ONE;
     t.handlers.create_instance = state_create; t.handlers.destroy_instance = state_destroy;
     t.handlers.query_at = state_at;
+    support_add_type(registry, &t);
+
+    t = support_base_type("test.retire", "Retire");
+    t.n_outlets = 1; t.outlets = OUT_ONE;
+    t.handlers.create_shared = retire_create_shared; t.handlers.destroy_shared = retire_destroy_shared;
+    t.handlers.query_at = retire_at; t.handlers.on_action = retire_action;
     support_add_type(registry, &t);
 
     t = support_base_type("test_boundary", "Boundary value");

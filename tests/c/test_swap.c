@@ -591,16 +591,17 @@ static void test_c_instances_in_other_threads_keep_answering_while_graphs_are_in
 
 /* ---- the engine's lock: who waits for it, and who never does ---- */
 
-enum { PROBE_SET_KNOB, PROBE_GET_KNOB, PROBE_SET_BOUNDARY, PROBE_ACTION, PROBE_NODE_COUNT, PROBE_GRAPH_SERIAL,      /* use the lists: shared lock */
+enum { PROBE_SET_KNOB, PROBE_GET_KNOB, PROBE_SET_BOUNDARY, PROBE_ACTION, PROBE_NODE_COUNT, PROBE_GRAPH_SERIAL, PROBE_BOUNDARY_COUNT, PROBE_BOUNDARY_AT,   /* use the lists: shared lock */
        PROBE_SET_GRAPH, PROBE_COLLECT, PROBE_NEW_INSTANCE, PROBE_FREE_INSTANCE, PROBE_ENGINE_FREE,                /* change them: exclusive lock */
        PROBE_QUERY_POINT, PROBE_QUERY_SPAN,                                                                        /* no lock at all */
        PROBE_COUNT };
 
-static const char *const PROBE_NAMES[PROBE_COUNT] = {"set_knob", "get_knob", "set_boundary_value", "action", "node_count", "graph_serial",
-                                                      "set_graph", "collect", "new_instance", "instance_free", "engine_free",
+static const char *const PROBE_NAMES[PROBE_COUNT] = {"set_knob", "get_knob", "set_boundary", "action", "node_count", "graph_serial",
+                                                      "boundary_count", "boundary_at", "set_graph", "collect", "new_instance", "instance_free", "engine_free",
                                                       "instance_inlet_at", "instance_inlet_span"};
 #define PROBES_SHARED ((1u << PROBE_SET_KNOB) | (1u << PROBE_GET_KNOB) | (1u << PROBE_SET_BOUNDARY) | (1u << PROBE_ACTION) | \
-                       (1u << PROBE_NODE_COUNT) | (1u << PROBE_GRAPH_SERIAL))
+                       (1u << PROBE_NODE_COUNT) | (1u << PROBE_GRAPH_SERIAL) | (1u << PROBE_BOUNDARY_COUNT) | \
+                       (1u << PROBE_BOUNDARY_AT))
 #define PROBES_EXCLUSIVE ((1u << PROBE_SET_GRAPH) | (1u << PROBE_COLLECT) | (1u << PROBE_NEW_INSTANCE) | (1u << PROBE_FREE_INSTANCE) | \
                           (1u << PROBE_ENGINE_FREE))
 #define PROBES_QUERY ((1u << PROBE_QUERY_POINT) | (1u << PROBE_QUERY_SPAN))
@@ -624,7 +625,9 @@ static unsigned __stdcall probe_main(void *argument)
     switch (probe->what) {
     case PROBE_SET_KNOB: probe->status = canopy_engine_set_knob(probe->engine, 1, 0, 0.5f); break;
     case PROBE_GET_KNOB: probe->status = canopy_engine_get_knob(probe->engine, 1, 0, &value, &generation); break;
-    case PROBE_SET_BOUNDARY: probe->status = canopy_engine_set_boundary_value(probe->engine, 3, 0.5f); break;
+    case PROBE_SET_BOUNDARY: probe->status = canopy_engine_set_boundary(probe->engine, "b", 0.5f); break;
+    case PROBE_BOUNDARY_COUNT: probe->status = canopy_engine_boundary_count(probe->engine) == 1 ? CANOPY_OK : -1; break;
+    case PROBE_BOUNDARY_AT: probe->status = canopy_engine_boundary_at(probe->engine, 0, NULL, 0, NULL, NULL, NULL); break;
     case PROBE_ACTION: probe->status = canopy_engine_action(probe->engine, 2, "bump"); break;
     case PROBE_NODE_COUNT: probe->status = canopy_engine_node_count(probe->engine) == 5 ? CANOPY_OK : -1; break;
     case PROBE_GRAPH_SERIAL: probe->status = canopy_engine_graph_serial(probe->engine) >= 1 ? CANOPY_OK : -1; break;
@@ -696,10 +699,11 @@ static void test_c_calls_that_use_the_engines_lists_wait_for_its_lock_and_querie
     rig_open(&rig);
     rig_node(&rig, 1, "test.gain");
     rig_node(&rig, 2, "test.source");
-    rig_node(&rig, 3, "test_boundary");
+    rig_node(&rig, 3, "boundary_inlet");
     rig_node(&rig, 4, "test.const");
     rig_node(&rig, 9, "test.sink");
     rig_connect(&rig, 4, "out", 9, "in0");
+    CHECK_INT(canopy_graph_set_string(rig.graph, 3, "name", "b"), CANOPY_OK);
     CHECK_INT(canopy_graph_set_float(rig.graph, 4, "value", 0.5), CANOPY_OK);
     rig_install(&rig);
     for_span = canopy_engine_new_instance(rig.engine);

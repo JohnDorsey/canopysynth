@@ -22,6 +22,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import traceback
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +39,14 @@ def build():
 
 
 C_PROGRAM_SECONDS = int(os.environ.get("CANOPY_TEST_TIMEOUT", "180"))     # a whole C test program takes a few seconds; one that runs this long is stuck
+PYTHON_TEST_SECONDS = max(30, C_PROGRAM_SECONDS // 2)                      # one Python test; the slowest takes a few seconds
+
+
+def give_up(name):
+    """Called by the timer of a Python test that does not finish: a test stuck in a wait must not hang the suite (or a mutation check)."""
+    print(f"  FAIL  {name}", flush=True)
+    print(f"    did not finish within {PYTHON_TEST_SECONDS} s and the run was stopped: the test is stuck", flush=True)
+    os._exit(1)
 
 
 def run_c_program(name, extra_env=None):
@@ -108,11 +117,16 @@ def main(argv):
     contains = [argv[i + 1] for i, a in enumerate(argv) if a == "-k" and i + 1 < len(argv)]
     passed, failed = run_c_tests("--no-debug" not in argv, "--no-asan" not in argv)
     for name, fn in python_tests(areas, contains):
+        timer = threading.Timer(PYTHON_TEST_SECONDS, give_up, args=(name,))
+        timer.daemon = True
+        timer.start()
         try:
             fn()
+            timer.cancel()
             passed += 1
             print(f"  PASS  {name}")
         except Exception:                            # noqa: BLE001
+            timer.cancel()
             failed += 1
             print(f"  FAIL  {name}")
             traceback.print_exc(limit=3, file=sys.stdout)

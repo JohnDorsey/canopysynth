@@ -49,7 +49,7 @@ static CanopyNodeType make_valid(void)
 
 static void test_c_a_valid_type_registers_and_reads_back_all_its_metadata(void)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     CanopyNodeType type = make_valid();
     const CanopyNodeType *found;
     CHECK(canopy_registry_register(registry, &type) == CANOPY_OK);
@@ -73,7 +73,7 @@ static void test_c_a_valid_type_registers_and_reads_back_all_its_metadata(void)
 
 static void test_c_the_registry_keeps_its_own_copy_of_every_string_and_array(void)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     char key[] = "vendor.copy";
     char label[] = "Label";
     CanopyInletDesc inlet = {"input", label, 0.25f};
@@ -93,7 +93,7 @@ static void test_c_the_registry_keeps_its_own_copy_of_every_string_and_array(voi
 
 static void test_c_types_are_listed_in_registration_order(void)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     CanopyNodeType a = make_valid(), b = make_valid(), c = make_valid();
     a.key = "v.a"; b.key = "v.b"; c.key = "v.c";
     CHECK(canopy_registry_register(registry, &b) == CANOPY_OK);
@@ -106,7 +106,7 @@ static void test_c_types_are_listed_in_registration_order(void)
 
 static int32_t register_with_key(const char *key, int builtin)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     CanopyNodeType type = make_valid();
     int32_t status;
     type.key = key;
@@ -140,7 +140,7 @@ static void test_c_malformed_keys_are_refused(void)
 
 static void test_c_a_key_cannot_be_registered_twice(void)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     CanopyNodeType type = make_valid();
     CHECK(canopy_registry_register(registry, &type) == CANOPY_OK);
     CHECK(canopy_registry_register(registry, &type) == CANOPY_ERR_DUPLICATE);
@@ -151,7 +151,7 @@ static void test_c_a_key_cannot_be_registered_twice(void)
 
 static void test_c_a_descriptor_of_another_layout_version_or_too_small_is_refused(void)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     CanopyNodeType type = make_valid();
     type.abi_version = CANOPY_ABI_VERSION + 1;
     CHECK(canopy_registry_register(registry, &type) == CANOPY_ERR_ABI);
@@ -169,7 +169,7 @@ static void test_c_a_descriptor_of_another_layout_version_or_too_small_is_refuse
 
 static int32_t status_for(CanopyNodeType type)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     int32_t status = canopy_registry_register(registry, &type);
     CHECK(status == CANOPY_OK || canopy_registry_count(registry) == 0);        /* nothing added on failure */
     CHECK(status == CANOPY_OK || strlen(canopy_registry_last_error(registry)) > 0);
@@ -240,7 +240,7 @@ static void test_c_descriptor_faults_are_refused_with_a_message(void)
 
 static void test_c_only_a_built_in_type_may_have_a_boundary_slot(void)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     CanopyNodeType type = make_valid();
     type.flags = CANOPY_FLAG_BOUNDARY_SLOT;
     CHECK(canopy_registry_register(registry, &type) == CANOPY_ERR_DESCRIPTOR);          /* a type with a dotted key (a plugin's) may not */
@@ -255,9 +255,54 @@ static void test_c_only_a_built_in_type_may_have_a_boundary_slot(void)
     canopy_registry_free(registry);
 }
 
+static void test_c_a_boundary_node_type_needs_a_string_setting_called_name_and_only_built_in_types_may_be_one(void)
+{
+    CanopyRegistry *registry = canopy_registry_new_empty();
+    CanopyNodeType type = make_valid();
+    CanopySettingDesc named[] = {{"name", CANOPY_SETTING_STRING, 0, 0.0, "", 0, NULL}};
+    CanopySettingDesc int_named[] = {{"name", CANOPY_SETTING_INT, 0, 0.0, NULL, 0, NULL}};
+    CanopySettingDesc other[] = {{"label", CANOPY_SETTING_STRING, 0, 0.0, "", 0, NULL}};
+    type.n_widgets = 0; type.widgets = NULL;
+    type.n_settings = 1; type.settings = named;
+    type.flags = CANOPY_FLAG_BOUNDARY_NODE;
+    CHECK(canopy_registry_register(registry, &type) == CANOPY_ERR_DESCRIPTOR);          /* a plug-in type may not be a boundary node */
+    type.key = "named_node";
+    CHECK(canopy_registry_register_builtin(registry, &type) == CANOPY_OK);
+    type.key = "int_named_node"; type.settings = int_named;
+    CHECK(canopy_registry_register_builtin(registry, &type) == CANOPY_ERR_DESCRIPTOR);   /* the name must be text */
+    type.key = "other_named_node"; type.settings = other;
+    CHECK(canopy_registry_register_builtin(registry, &type) == CANOPY_ERR_DESCRIPTOR);   /* and called name */
+    type.key = "unnamed_node"; type.n_settings = 0; type.settings = NULL;
+    CHECK(canopy_registry_register_builtin(registry, &type) == CANOPY_ERR_DESCRIPTOR);
+    CHECK(canopy_registry_count(registry) == 1);
+    canopy_registry_free(registry);
+}
+
+static void test_c_a_new_registry_that_runs_out_of_memory_is_complete_or_not_there_and_leaks_nothing(void)
+{
+    int64_t live = canopy_alloc_live(), fail_at;
+    int complete = 0, refused = 0;
+    for (fail_at = 0; fail_at < 400 && complete < 2; fail_at++) {
+        CanopyRegistry *registry;
+        canopy_alloc_fail_after(fail_at);
+        registry = canopy_registry_new();
+        canopy_alloc_fail_after(-1);
+        if (registry) {
+            CHECK(canopy_registry_find(registry, "boundary_inlet") != NULL && canopy_registry_find(registry, "boundary_outlet") != NULL);
+            complete++;
+            canopy_registry_free(registry);
+        } else {
+            refused++;
+        }
+        CHECK_INT(canopy_alloc_live(), live);
+    }
+    CHECK(refused > 20);
+    CHECK(complete == 2);
+}
+
 static void test_c_the_internal_sampling_rate_setting_is_added_when_the_flag_is_set(void)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     CanopyNodeType with = make_valid(), without = make_valid();
     const CanopyNodeType *found;
     with.key = "v.with"; with.flags = CANOPY_FLAG_HAS_INTERNAL_RATE;
@@ -278,7 +323,7 @@ static void test_c_the_internal_sampling_rate_setting_is_added_when_the_flag_is_
 
 static void test_c_a_widget_may_edit_the_internal_sampling_rate(void)
 {
-    CanopyRegistry *registry = canopy_registry_new();
+    CanopyRegistry *registry = canopy_registry_new_empty();
     CanopyNodeType type = make_valid();
     CanopyWidgetDesc rate_widget[] = {{CANOPY_WIDGET_TEXT, "Rate", CANOPY_INTERNAL_RATE_KEY, NULL, 0, NULL}};
     type.flags = CANOPY_FLAG_HAS_INTERNAL_RATE;
@@ -316,6 +361,8 @@ void register_test_registry(void)
     RUN(test_c_a_descriptor_of_another_layout_version_or_too_small_is_refused);
     RUN(test_c_descriptor_faults_are_refused_with_a_message);
     RUN(test_c_only_a_built_in_type_may_have_a_boundary_slot);
+    RUN(test_c_a_boundary_node_type_needs_a_string_setting_called_name_and_only_built_in_types_may_be_one);
+    RUN(test_c_a_new_registry_that_runs_out_of_memory_is_complete_or_not_there_and_leaks_nothing);
     RUN(test_c_the_internal_sampling_rate_setting_is_added_when_the_flag_is_set);
     RUN(test_c_a_widget_may_edit_the_internal_sampling_rate);
     RUN(test_c_the_descriptor_has_the_size_the_python_mirror_expects);

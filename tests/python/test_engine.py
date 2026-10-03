@@ -330,12 +330,14 @@ def test_py_knob_writes_from_one_thread_are_seen_whole_by_readers_in_other_threa
     for thread in threads:
         thread.start()
     writes, deadline = 0, time.time() + 20
-    while (writes < 4000 or min(reads) < 2000) and time.time() < deadline:        # write until every reader has really been reading
-        assert e.engine_set_knob(rig.engine, 1, 0, 0.3 if writes % 2 == 0 else -0.7) == e.OK
-        writes += 1
-    stop.set()
-    for thread in threads:
-        thread.join()
+    try:
+        while (writes < 4000 or min(reads) < 2000) and time.time() < deadline:    # write until every reader has really been reading
+            assert e.engine_set_knob(rig.engine, 1, 0, 0.3 if writes % 2 == 0 else -0.7) == e.OK
+            writes += 1
+    finally:                                                                     # whatever happens, the readers must stop
+        stop.set()
+        for thread in threads:
+            thread.join()
     assert not problems, problems[:5]
     assert min(reads) >= 2000, reads
     value, generation = ctypes.c_float(), ctypes.c_uint64()
