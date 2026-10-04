@@ -244,11 +244,11 @@ class Instance:
 
     def value(self, name, t_ns):
         """A point query of the boundary outlet `name` at time `t_ns` (integer nanoseconds): a float. BoundaryError if there is no such boundary
-        outlet; QueryError if the instance is in use by another thread. (A node that fails inside the graph answers 0.0: design section 5.)"""
+        outlet; QueryError on any other nonzero status (a node's own failure, an instance in use by another thread), as for `audio`."""
         handle = self._handle()
         raw, t = _name_bytes(name), _time(t_ns, "t_ns")
         out = ctypes.c_float()
-        status = self._lib.canopy_instance_read_at_status(handle, raw, t, ctypes.byref(out))
+        status = self._lib.canopy_instance_read_at(handle, raw, t, ctypes.byref(out))
         if status != native.OK:
             raise self._fail(status, name, f"point query of {name!r} at {t} ns")
         return out.value

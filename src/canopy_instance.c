@@ -38,26 +38,31 @@ static void zero_fill(float *out, int64_t n)
     memset(out, 0, (size_t)n * sizeof(float));
 }
 
-/* The point answer of an outlet. A node with only a span handler is asked for a one-sample span at (t, t); a failure gives 0.0. */
-static float outlet_at(CanopyInstance *instance, int32_t node_index, int32_t outlet, int64_t t)
+/* The point answer of an outlet, with a status; *out is 0.0 on every failure, whatever the node wrote. A node with only a span handler is asked
+   for a one-sample span at (t, t) and its status is passed on. */
+static int32_t outlet_at(CanopyInstance *instance, int32_t node_index, int32_t outlet, int64_t t, float *out)
 {
     const CanopyHandlers *handlers = &instance->graph->nodes[node_index].type->handlers;
     struct CanopyCtx ctx;
     float value = 0.0f;
+    int32_t status;
     if (handlers->query_at) {
         ctx_begin(&ctx, instance, node_index);
-        value = handlers->query_at(&ctx, outlet, t);
+        status = handlers->query_at(&ctx, outlet, t, &value);
         ctx_end(&ctx);
     } else if (handlers->query_span) {
         ctx_begin(&ctx, instance, node_index);
-        if (handlers->query_span(&ctx, outlet, t, t, 1, &value) != CANOPY_OK) value = 0.0f;
+        status = handlers->query_span(&ctx, outlet, t, t, 1, &value);
         ctx_end(&ctx);
+    } else {
+        status = CANOPY_ERR_DESCRIPTOR;                          /* the registry does not let a node with outlets lack both handlers */
     }
-    return value;
+    *out = status == CANOPY_OK ? value : 0.0f;
+    return status;
 }
 
 /* The span answer of an outlet; the arguments have been checked (n, out, overflow). A node with only a point handler is asked once per
-   sample time. Whatever the node did to `out`, a failure leaves it zero-filled. */
+   sample time, and the first failure ends the span. Whatever the node did to `out`, a failure leaves it zero-filled. */
 static int32_t outlet_span(CanopyInstance *instance, int32_t node_index, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)
 {
     const CanopyHandlers *handlers = &instance->graph->nodes[node_index].type->handlers;
@@ -72,10 +77,12 @@ static int32_t outlet_span(CanopyInstance *instance, int32_t node_index, int32_t
         int64_t i;
         status = canopy_span_plan(t0, t1, n, &plan);
         if (status == CANOPY_OK) {
-            for (i = 0; i < n; i++) {
+            for (i = 0; i < n && status == CANOPY_OK; i++) {
+                float value = 0.0f;
                 ctx_begin(&ctx, instance, node_index);
-                out[i] = handlers->query_at(&ctx, outlet, canopy_span_plan_time(&plan, i));
+                status = handlers->query_at(&ctx, outlet, canopy_span_plan_time(&plan, i), &value);
                 ctx_end(&ctx);
+                out[i] = value;
             }
         }
     } else {
@@ -100,14 +107,20 @@ static int32_t check_span(int64_t t0, int64_t t1, int64_t n, float *out)
 
 /* ---- inlets: the connected outlet, or the knob ---- */
 
-static float inlet_at(CanopyInstance *instance, int32_t node_index, int32_t inlet, int64_t t)
+static int32_t inlet_at(CanopyInstance *instance, int32_t node_index, int32_t inlet, int64_t t, float *out)
 {
     const CanopyCNode *node = &instance->graph->nodes[node_index];
     CanopyLink link;
-    if (inlet < 0 || inlet >= node->type->n_inlets) return 0.0f;
+    if (inlet < 0 || inlet >= node->type->n_inlets) {
+        *out = 0.0f;
+        return CANOPY_ERR_PORT;
+    }
     link = node->links[inlet];
-    if (link.node < 0) return canopy_slot_load(node->knobs[inlet]);
-    return outlet_at(instance, link.node, link.outlet, t);
+    if (link.node < 0) {
+        *out = canopy_slot_load(node->knobs[inlet]);
+        return CANOPY_OK;
+    }
+    return outlet_at(instance, link.node, link.outlet, t, out);
 }
 
 static int32_t inlet_span(CanopyInstance *instance, int32_t node_index, int32_t inlet, int64_t t0, int64_t t1, int64_t n, float *out)
@@ -130,10 +143,14 @@ static int32_t inlet_span(CanopyInstance *instance, int32_t node_index, int32_t 
 
 /* ---- what a handler may call ---- */
 
-float canopy_inlet_at(CanopyCtx *ctx, int32_t inlet, int64_t t)
+int32_t canopy_inlet_at(CanopyCtx *ctx, int32_t inlet, int64_t t, float *out)
 {
-    if (!ctx || !ctx->querying) return 0.0f;
-    return inlet_at(ctx->instance, ctx->node_index, inlet, t);
+    if (!out) return CANOPY_ERR_ARGUMENT;
+    if (!ctx || !ctx->querying) {
+        *out = 0.0f;
+        return CANOPY_ERR_ARGUMENT;
+    }
+    return inlet_at(ctx->instance, ctx->node_index, inlet, t, out);
 }
 
 int32_t canopy_inlet_span(CanopyCtx *ctx, int32_t inlet, int64_t t0, int64_t t1, int64_t n, float *out)
@@ -242,15 +259,17 @@ static void release(CanopyInstance *instance)
     atomic_store_explicit(&instance->busy, 0, memory_order_release);
 }
 
-float canopy_instance_inlet_at(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t)
+int32_t canopy_instance_inlet_at(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t, float *out)
 {
-    int32_t index = 0;
-    float value = 0.0f;
-    if (!instance || !acquire(instance)) return 0.0f;
+    int32_t index = 0, status;
+    if (out) *out = 0.0f;
+    if (!instance || !out) return CANOPY_ERR_ARGUMENT;
+    if (!acquire(instance)) return CANOPY_ERR_BUSY;
     canopy_instance_adopt(instance);                                          /* a newly installed graph is taken up here, by swapping pointers */
-    if (canopy_compiled_find(instance->graph, node_id, &index)) value = inlet_at(instance, index, inlet, t);
+    if (canopy_compiled_find(instance->graph, node_id, &index)) status = inlet_at(instance, index, inlet, t, out);
+    else status = CANOPY_ERR_NODE;
     release(instance);
-    return value;
+    return status;
 }
 
 /* The boundary outlet called `name` in the graph the instance runs, as a node index, or -1. */
@@ -260,25 +279,18 @@ static int32_t outlet_by_name(const CanopyInstance *instance, const char *name)
     return entry && entry->kind == CANOPY_BOUNDARY_OUTLET ? entry->node : -1;
 }
 
-int32_t canopy_instance_read_at_status(CanopyInstance *instance, const char *name, int64_t t, float *value)
+int32_t canopy_instance_read_at(CanopyInstance *instance, const char *name, int64_t t, float *out)
 {
-    int32_t index, status = CANOPY_OK;
-    if (value) *value = 0.0f;
-    if (!instance || !name || !value) return CANOPY_ERR_ARGUMENT;
+    int32_t index, status;
+    if (out) *out = 0.0f;
+    if (!instance || !name || !out) return CANOPY_ERR_ARGUMENT;
     if (!acquire(instance)) return CANOPY_ERR_BUSY;
     canopy_instance_adopt(instance);
     index = outlet_by_name(instance, name);
-    if (index >= 0) *value = inlet_at(instance, index, 0, t);
+    if (index >= 0) status = inlet_at(instance, index, 0, t, out);
     else status = CANOPY_ERR_NODE;
     release(instance);
     return status;
-}
-
-float canopy_instance_read_at(CanopyInstance *instance, const char *name, int64_t t)
-{
-    float value = 0.0f;
-    canopy_instance_read_at_status(instance, name, t, &value);
-    return value;
 }
 
 int32_t canopy_instance_read_span(CanopyInstance *instance, const char *name, int64_t t0, int64_t t1, int64_t n, float *out)

@@ -9,7 +9,7 @@
 #include "canopy.h"
 
 /* The version of this descriptor layout. A descriptor made for another version is refused (CANOPY_ERR_ABI). */
-#define CANOPY_ABI_VERSION 1
+#define CANOPY_ABI_VERSION 2
 CANOPY_API int32_t canopy_abi_version(void);
 
 /* "this node, in this instance, during this call": opaque, handed to every handler, valid only until the handler returns, and never to be
@@ -65,21 +65,24 @@ typedef struct {
 } CanopyWidgetDesc;
 
 /* ---- handlers ----
-   query_at(ctx, outlet, t): the value of the outlet at time t. It cannot report an error: a failure returns 0.0f.
+   query_at(ctx, outlet, t, out): writes the value of the outlet at time t to *out and returns CANOPY_OK, or returns a nonzero status of the
+   node's own choosing; after a nonzero status the engine sets *out to 0.0f whatever the node wrote. `out` is never NULL. (Until ABI version 2 a
+   point query returned the float itself and could not report an error; now it reports one exactly as a span query does.)
    query_span(ctx, outlet, t0, t1, n, out): fills exactly n floats of `out` with the outlet's values at the n sample times of the span
    (design section 5) and returns CANOPY_OK, or a nonzero status of the node's own choosing; after a nonzero status the engine zero-fills
    `out` whatever the node wrote. Before calling it the engine has checked that n is in 1 .. CANOPY_MAX_N, that `out` is not NULL and that
    t1 - t0 fits in an int64, so the node need not. `out` is the caller's: it may be uninitialized (write before reading), it never overlaps
    another buffer of the call, and the node keeps no pointer to it after returning.
    A node type implements query_at, query_span or both. With only query_at (a "pointwise" node) the engine derives the span by calling
-   query_at once per sample time; with only query_span a point query at t is answered by query_span(t, t, 1) (0.0f if that fails). Implement
-   both when a span can be done faster than n point queries. */
+   query_at once per sample time (the first nonzero status ends the span: `out` is zero-filled and the status returned); with only query_span a
+   point query at t is answered by query_span(t, t, 1), its status passed on. Implement both when a span can be done faster than n point
+   queries. */
 typedef struct CanopyHandlers {
     void *(*create_shared)(CanopyCtx *ctx);                       /* the shared runtime resource, once per node ID; may be NULL */
     void (*destroy_shared)(CanopyCtx *ctx, void *shared);
     void *(*create_instance)(CanopyCtx *ctx);                     /* the instance state, once per instance; may be NULL */
     void (*destroy_instance)(CanopyCtx *ctx, void *state);
-    float (*query_at)(CanopyCtx *ctx, int32_t outlet, int64_t t);
+    int32_t (*query_at)(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out);
     int32_t (*query_span)(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out);
     void (*on_action)(CanopyCtx *ctx, const char *action);        /* a button was pressed (UI thread) */
 } CanopyHandlers;
@@ -88,8 +91,8 @@ typedef struct CanopyHandlers {
    Which handlers get which context:
      query_at, query_span: everything below.
      create_shared, destroy_shared, create_instance, destroy_instance, on_action: only the settings getters, canopy_ctx_shared() and
-     canopy_ctx_state(). There is no query in progress there, so canopy_inlet_at() returns 0.0f, canopy_inlet_span() returns
-     CANOPY_ERR_ARGUMENT (and zero-fills `out`) and canopy_scratch() returns NULL.
+     canopy_ctx_state(). There is no query in progress there, so canopy_inlet_at() and canopy_inlet_span() return CANOPY_ERR_ARGUMENT (and
+     set or zero-fill `out`) and canopy_scratch() returns NULL.
    A handler that returns NULL from create_shared or create_instance simply has no shared resource or no instance state (its destroy handler
    is then not called).
    Which thread: query_at and query_span run in the thread that queries. create_shared, destroy_shared, create_instance and destroy_instance
@@ -99,9 +102,12 @@ typedef struct CanopyHandlers {
    delays installs (and, behind a waiting install, knob writes), never a query. None of these handlers
    may call back into the engine (they have no way to; a node that kept an engine pointer of its own would deadlock). */
 
-/* Point query of an inlet: the connected outlet's answer for time `t`, or the inlet's knob position (-1..1, ignoring `t`) when nothing is
-   connected, so a node never needs to know whether it is connected. A bad inlet index returns 0.0f. */
-CANOPY_API float canopy_inlet_at(CanopyCtx *ctx, int32_t inlet, int64_t t);
+/* Point query of an inlet: writes to *out the connected outlet's answer for time `t`, or the inlet's knob position (-1..1, ignoring `t`) when
+   nothing is connected, so a node never needs to know whether it is connected. Returns CANOPY_OK, or a nonzero status with *out set to 0.0f:
+     CANOPY_ERR_ARGUMENT  `out` is NULL (then nothing is written), or this handler has no query in progress
+     CANOPY_ERR_PORT      a bad inlet index
+   or the status the queried node returned, passed through unchanged. A node that does not care may ignore the status: *out is silence then. */
+CANOPY_API int32_t canopy_inlet_at(CanopyCtx *ctx, int32_t inlet, int64_t t, float *out);
 
 /* Span query of an inlet: fills exactly `n` floats of `out` with the connected outlet's answer for the span [t0, t1) sampled as in design
    section 5 (sample i at t0 + floor(i * (t1 - t0) / n); t1 < t0 plays the span backwards; t1 == t0 puts every sample at t0), or with the knob

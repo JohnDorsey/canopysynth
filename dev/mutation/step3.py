@@ -21,14 +21,14 @@ MUTATIONS = [
     ("I04 overflow not checked", I, "    if (canopy_span_overflows(t0, t1)) {\n        zero_fill(out, n);", "    if (canopy_span_overflows(t0, t1 - t1 + t0)) {\n        zero_fill(out, n);"),
     ("I05 overflow does not zero-fill", I, "    if (canopy_span_overflows(t0, t1)) {\n        zero_fill(out, n);\n        return CANOPY_ERR_OVERFLOW;", "    if (canopy_span_overflows(t0, t1)) {\n        return CANOPY_ERR_OVERFLOW;"),
     ("I06 node failure not zero-filled", I, "    if (status != CANOPY_OK) zero_fill(out, n);", "    if (status != CANOPY_OK) (void)0;"),
-    ("I07 derived sample time off by one", I, "canopy_span_plan_time(&plan, i));", "canopy_span_plan_time(&plan, i + 1));"),
-    ("I08 span-only point query asks t..t+1", I, "query_span(&ctx, outlet, t, t, 1, &value) != CANOPY_OK) value = 0.0f;", "query_span(&ctx, outlet, t, t + 1, 1, &value) != CANOPY_OK) value = 0.0f;"),
-    ("I09 span-only point failure keeps node's value", I, "query_span(&ctx, outlet, t, t, 1, &value) != CANOPY_OK) value = 0.0f;", "query_span(&ctx, outlet, t, t, 1, &value) != CANOPY_OK) (void)0;"),
+    ("I07 derived sample time off by one", I, 'canopy_span_plan_time(&plan, i), &value);', 'canopy_span_plan_time(&plan, i + 1), &value);'),
+    ("I08 span-only point query asks t..t+1", I, 'status = handlers->query_span(&ctx, outlet, t, t, 1, &value);', 'status = handlers->query_span(&ctx, outlet, t, t + 1, 1, &value);'),
+    ("I09 span-only point failure keeps node's value", I, '    *out = status == CANOPY_OK ? value : 0.0f;', '    *out = value;'),
     # ---- the knob fallback ----
-    ("I10 knob fallback returns 0 (point)", I, "    if (link.node < 0) return canopy_slot_load(node->knobs[inlet]);", "    if (link.node < 0) return 0.0f;"),
+    ("I10 knob fallback returns 0 (point)", I, '        *out = canopy_slot_load(node->knobs[inlet]);\n        return CANOPY_OK;', '        *out = 0.0f;\n        return CANOPY_OK;'),
     ("I11 knob fallback leaves the last sample", I, "        for (i = 0; i < n; i++) out[i] = knob;", "        for (i = 0; i < n - 1; i++) out[i] = knob;"),
     ("I12 bad inlet not zero-filled", I, "        zero_fill(out, n);\n        return CANOPY_ERR_PORT;", "        return CANOPY_ERR_PORT;"),
-    ("I27 bad inlet index not checked (point)", I, "    if (inlet < 0 || inlet >= node->type->n_inlets) return 0.0f;\n", ""),
+    ("I27 bad inlet index not checked (point)", I, '    if (inlet < 0 || inlet >= node->type->n_inlets) {\n        *out = 0.0f;\n        return CANOPY_ERR_PORT;\n    }\n', ''),
     ("I21 unknown node not zero-filled", I, "        zero_fill(out, n);\n        status = CANOPY_ERR_NODE;\n    } else {\n        status = inlet_span(instance, index, inlet,", "        status = CANOPY_ERR_NODE;\n    } else {\n        status = inlet_span(instance, index, inlet,"),
     # ---- scratch ----
     ("I13 declared count not enforced", I, "    if (ctx->scratch_taken >= ctx->node->type->scratch_buffers) return NULL;\n", ""),
@@ -45,7 +45,7 @@ MUTATIONS = [
     ("I25 ctx_state always NULL", I, "    return ctx ? ctx->state : NULL;", "    (void)ctx;\n    return NULL;"),
     ("I26 ctx_shared always NULL", I, "    return ctx && ctx->node ? ctx->node->shared : NULL;", "    (void)ctx;\n    return NULL;"),
     ("I20 typed getters ignore the kind", I, "    return kind == kind_a || kind == kind_b ? &ctx->node->settings[index] : NULL;", "    return kind >= 0 || kind_a == kind_b ? &ctx->node->settings[index] : NULL;"),
-    ("I28 inlet_at allowed outside a query", I, "    if (!ctx || !ctx->querying) return 0.0f;", "    if (!ctx) return 0.0f;"),
+    ("I28 inlet_at allowed outside a query", I, '    if (!ctx || !ctx->querying) {\n        *out = 0.0f;\n        return CANOPY_ERR_ARGUMENT;\n    }\n    return inlet_at(', '    if (!ctx) {\n        *out = 0.0f;\n        return CANOPY_ERR_ARGUMENT;\n    }\n    return inlet_at('),
     ("I29 inlet_span allowed outside a query", I, "    if (!ctx || !ctx->querying) {\n        zero_fill(out, n);", "    if (!ctx) {\n        zero_fill(out, n);"),
     # ---- compiling ----
     ("E01 duplicate node ID not found", E, "        if (keys[i].id == keys[i - 1].id) {", "        if (keys[i].id == keys[i - 1].id && i < 0) {"),
@@ -105,7 +105,7 @@ MUTATIONS = [
     # ---- writing one float past the end of `out`: the guard zones and the debug heap must notice ----
     ("I33 knob fill writes one float past out", I, "        for (i = 0; i < n; i++) out[i] = knob;", "        for (i = 0; i <= n; i++) out[i] = knob;"),
     ("I34 zero-fill writes one float past out", I, "    memset(out, 0, (size_t)n * sizeof(float));", "    memset(out, 0, ((size_t)n + 1) * sizeof(float));"),
-    ("I35 derived span writes one float past out", I, "            for (i = 0; i < n; i++) {\n                ctx_begin(&ctx, instance, node_index);", "            for (i = 0; i <= n; i++) {\n                ctx_begin(&ctx, instance, node_index);"),
+    ("I35 derived span writes one float past out", I, '            for (i = 0; i < n && status == CANOPY_OK; i++) {', '            for (i = 0; i <= n && status == CANOPY_OK; i++) {'),
     # ---- faults that only AddressSanitizer can see: a read past a heap block, and a read of freed memory (silent in the other two runs) ----
     ("A36 reads one int past the end of a heap block", E, "    for (i = 0; i < n; i++) total += c->nodes[i].type->scratch_buffers;", "    for (i = 0; i < n; i++) total += c->nodes[i].type->scratch_buffers + (int64_t)(((volatile int32_t *)first)[n + 1] & 0);"),
     ("A37 reads a block after freeing it", P, "    canopy_free(instance->states);\n    canopy_free(instance->arena_block);", "    canopy_free(instance->states);\n    (void)*(volatile char *)instance->states;\n    canopy_free(instance->arena_block);"),

@@ -19,7 +19,7 @@ static void retire_rig(Rig *rig)
 
 static float number_seen(CanopyInstance *instance)
 {
-    return canopy_instance_inlet_at(instance, 9, 0, 0);
+    return host_inlet_at(instance, 9, 0, 0);
 }
 
 static int local_released;

@@ -72,7 +72,9 @@ file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used
 - Every connection carries the same single kind of signal: a function of time answered as float32. There are no connection types, so no
   connection can be a type error.
 - The node that owns an inlet can query the connected outlet in two ways, and one node may use both kinds at different times:
-  1. a point query: a function taking a time `t` and returning one float32 (it cannot report an error; a failure returns 0.0);
+  1. a point query, in C: `int query_at(Inlet*, int64 t, float* out)`. The caller passes a `float` `out` that it owns; the queried node writes the
+     one float32 value for time `t` to it and returns an int status (0 = success). On failure it writes 0.0 and returns a nonzero status
+     (changed after step 9, at the author's request: a point query used to return the float itself and could not report an error);
   2. a span query, in C: `int query_span(Inlet*, int64 t0, int64 t1, int64 n, float* out)`. The caller passes the number of samples `n` it
      wants and a buffer `out` that it owns with room for `n` floats; the queried node fills exactly `n` floats, resampling if necessary. It
      returns an int status (0 = success). On failure it zero-fills `out` (all `n` floats when `n` is valid) and returns a nonzero status.
@@ -97,7 +99,7 @@ file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used
   not read it before writing it, and must not keep the pointer after returning.
 - A caller may interpret the floats as audio (not required).
 - In Python, a span query on a BoundaryOutletNode returns a memoryview over a float32 array, so a host with numpy can wrap it for free, while
-  numpy is not a dependency of CANOPY. A nonzero status raises `QueryError`.
+  numpy is not a dependency of CANOPY. A nonzero status raises `QueryError`, for a point query as for a span query.
 
 ## 6. Inlets and knobs
 
@@ -201,12 +203,12 @@ file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used
     bound to a setting edits it, a widget bound to an action calls `on_action(name)` on the UI thread;
   - handlers: create and destroy the shared resource; create and destroy the instance state; `query_at` and/or `query_span`; `on_action`.
 - Handler signatures (C):
-  `float query_at(CanopyCtx* ctx, int outlet, int64 t)` and `int query_span(CanopyCtx* ctx, int outlet, int64 t0, int64 t1, int64 n, float* out)`.
+  `int query_at(CanopyCtx* ctx, int outlet, int64 t, float* out)` and `int query_span(CanopyCtx* ctx, int outlet, int64 t0, int64 t1, int64 n, float* out)`.
 - `CanopyCtx*` is opaque, handed to every handler, valid only until the handler returns, and never used from another thread. It stands for
   "this node, in this instance, during this call". A node never sees engine internals. Through it a node uses:
-  - `float canopy_inlet_at(CanopyCtx*, int inlet, int64 t)` and `int canopy_inlet_span(CanopyCtx*, int inlet, int64 t0, int64 t1, int64 n, float* out)`:
-    query the connected outlet, or return the knob value when the inlet is unconnected (so a node never branches on connection); the span
-    version passes the upstream status through;
+  - `int canopy_inlet_at(CanopyCtx*, int inlet, int64 t, float* out)` and `int canopy_inlet_span(CanopyCtx*, int inlet, int64 t0, int64 t1, int64 n, float* out)`:
+    query the connected outlet, or give the knob value when the inlet is unconnected (so a node never branches on connection); both pass the
+    upstream status through (a node that does not care may ignore it: the point's `out` is 0.0 and the span's is zero-filled after a failure);
   - `float* canopy_scratch(CanopyCtx*, int64 n)`: `n` uninitialized floats from the instance's arena, or NULL if `n` exceeds 65536 or the
     arena is exhausted; released automatically when the handler returns; several may be taken in one call, but no more than the node type
     declared in `scratch_buffers` (a further request returns NULL, so that in a graph without loops the arena cannot run out for any other
@@ -284,7 +286,8 @@ a boundary node or its name: a name that does not exist, or a boundary node whos
 - A graph that cannot be compiled (an unknown node type, a bad setting or connection) raises `GraphError` with the reason, and one whose boundary
   nodes have an empty or repeated name (possible when built through the Python API) raises `BoundaryError`; the editor shows either and keeps the
   previous compiled graph running.
-- A C span query reports errors with its int status (section 5); a point query returns 0.0.
+- A C query, point or span, reports errors with its int status (section 5): after a failure a point's float is 0.0 and a span is zero-filled. In
+  Python every nonzero status raises `QueryError` (and a boundary name that does not exist raises `BoundaryError`).
 
 ## 17. Not in version 1
 

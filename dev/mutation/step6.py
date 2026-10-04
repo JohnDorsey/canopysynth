@@ -78,7 +78,7 @@ MUTATIONS = [
     ("F44 no interpolation", F, "    return (float)(a + fraction * (b - a));", "    return (float)a;"),
     ("F45 interpolation towards the wrong frame", F, "    b = (double)samples[k + 1];", "    b = (double)samples[k > 0 ? k - 1 : 0];"),
     ("F46 interpolation in float arithmetic", F, "    return (float)(a + fraction * (b - a));", "    return (float)((float)a + (float)fraction * ((float)b - (float)a));"),
-    ("F47 the outlets are swapped", F, "    return data ? sample_at(data, outlet == 1, t) : 0.0f;\n}\n\nstatic int32_t file_span", "    return data ? sample_at(data, outlet == 0, t) : 0.0f;\n}\n\nstatic int32_t file_span"),
+    ("F47 the outlets are swapped", F, '    *out = data ? sample_at(data, outlet == 1, t) : 0.0f;\n    return CANOPY_OK;\n}\n\nstatic int32_t file_span', '    *out = data ? sample_at(data, outlet == 0, t) : 0.0f;\n    return CANOPY_OK;\n}\n\nstatic int32_t file_span'),
     ("F48 a span of the right channel gives the left", F, "out[i] = data ? sample_at(data, outlet == 1, canopy_span_plan_time(&plan, i)) : 0.0f;", "out[i] = data ? sample_at(data, 0 * outlet, canopy_span_plan_time(&plan, i)) : 0.0f;"),
     ("F49 a span without a file is not silence", F, "out[i] = data ? sample_at(data, outlet == 1, canopy_span_plan_time(&plan, i)) : 0.0f;", "out[i] = data ? sample_at(data, outlet == 1, canopy_span_plan_time(&plan, i)) : 1.0f;"),
     ("F50 a span is placed from t1", F, "canopy_span_plan_time(&plan, i)) : 0.0f;", "canopy_span_plan_time(&plan, i) + 1) : 0.0f;"),

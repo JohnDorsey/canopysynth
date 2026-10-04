@@ -309,7 +309,7 @@ def test_py_times_must_be_64_bit_integers_and_n_a_whole_number_and_a_bad_n_is_a_
         assert inst.value("y", INT64_MIN) == 0.0 and inst.value("y", INT64_MAX) == 0.0
 
 
-def test_py_a_node_that_fails_in_a_span_query_raises_query_error_with_its_status_and_a_point_query_still_answers():
+def test_py_a_node_that_fails_in_a_span_query_raises_query_error_with_its_status_and_so_does_a_point_query():
     fail = PyNodeType("py.fail", inlets=[("in", 0.0)], outlets=["out"], span=lambda ctx, outlet, t0, t1, n, out: ERR_ARGUMENT)
     rig = Rig(fail)
     graph = Graph(types=NodeTypes.from_registry(rig.registry, e.lib))
@@ -318,7 +318,31 @@ def test_py_a_node_that_fails_in_a_span_query_raises_query_error_with_its_status
     with Engine(graph, registry=rig.registry) as engine, engine.new_instance() as inst:
         error = refuses(lambda: inst.audio("y", 0, 100, 10), QueryError)
         assert error.status == ERR_ARGUMENT and isinstance(error, Exception) and not isinstance(error, GraphError)
-        assert inst.value("y", 0) == 0.0                                 # a point query cannot report a failure (design section 5)
+        error = refuses(lambda: inst.value("y", 0), QueryError)           # a point query reports it too (the span handler answers it for a span-only node)
+        assert error.status == ERR_ARGUMENT and "point query" in str(error)
+    rig.close()
+
+
+def test_py_a_node_whose_point_handler_fails_makes_both_kinds_of_query_raise_query_error_with_its_status():
+    calls = []
+
+    def at(ctx, outlet, t):
+        calls.append(t)
+        return (42, 5.0) if t >= 100 else 0.25            # the answer 5.0 must not get out when the status is nonzero
+
+    pointwise = PyNodeType("py.pointwise", inlets=[("in", 0.0)], outlets=["out"], at=at)       # point handler only: spans are derived from it
+    rig = Rig(pointwise)
+    graph = Graph(types=NodeTypes.from_registry(rig.registry, e.lib))
+    node, sink = graph.add("py.pointwise"), graph.add("boundary_outlet", name="y")
+    graph.connect(node.outlet("out"), sink.inlet("in"))
+    with Engine(graph, registry=rig.registry) as engine, engine.new_instance() as inst:
+        assert inst.value("y", 99) == 0.25
+        error = refuses(lambda: inst.value("y", 100), QueryError, "point query")
+        assert error.status == 42
+        assert list(inst.audio("y", 0, 90, 9)) == [0.25] * 9
+        del calls[:]
+        error = refuses(lambda: inst.audio("y", 0, 200, 20), QueryError, "span query")      # the sample at t = 100 fails: the whole span does
+        assert error.status == 42 and calls == list(range(0, 110, 10))        # and nothing after it was asked
     rig.close()
 
 
@@ -330,9 +354,7 @@ def test_py_an_instance_used_twice_at_once_raises_query_error_busy_in_a_call_fro
             state["entered"].set()
             state["release"].wait(30)
             return 0.5
-        out = ctypes.c_float(5.0)
-        state["status"] = e.instance_read_at_status(state["pointer"], b"y", 0, ctypes.byref(out))
-        state["out"] = out.value
+        state["status"], state["out"] = e.instance_read_at_status(state["pointer"], b"y", 0)
         return 0.25
 
     middle = PyNodeType("py.middle", inlets=[("in", 0.0)], outlets=["out"], at=at)

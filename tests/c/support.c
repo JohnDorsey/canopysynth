@@ -111,10 +111,10 @@ static void fill(float *out, int64_t n, float value)
     for (i = 0; i < n; i++) out[i] = value;
 }
 
-static float const_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t const_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet; (void)t;
-    return (float)canopy_ctx_float(ctx, 0);
+    { *out = (float)canopy_ctx_float(ctx, 0); return CANOPY_OK; }
 }
 
 static int32_t const_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)
@@ -124,17 +124,17 @@ static int32_t const_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1
     return CANOPY_OK;
 }
 
-static float time_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t time_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx;
-    return outlet == 0 ? (float)t : 2.0f * (float)t;
+    { *out = outlet == 0 ? (float)t : 2.0f * (float)t; return CANOPY_OK; }
 }
 
-static float recorder_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t recorder_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx;
     log_call(0, outlet, t, t, 1);
-    return 0.5f;
+    { *out = 0.5f; return CANOPY_OK; }
 }
 
 static int32_t recorder_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)
@@ -145,10 +145,10 @@ static int32_t recorder_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t
     return CANOPY_OK;
 }
 
-static float gain_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t gain_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet;
-    return canopy_inlet_at(ctx, 0, t) * canopy_inlet_at(ctx, 1, t);
+    { *out = inlet_value(ctx, 0, t) * inlet_value(ctx, 1, t); return CANOPY_OK; }
 }
 
 static int32_t gain_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)
@@ -167,16 +167,16 @@ static int32_t gain_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1,
     return CANOPY_OK;
 }
 
-static float sum_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t sum_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet;
-    return canopy_inlet_at(ctx, 0, t) + canopy_inlet_at(ctx, 1, t);
+    { *out = inlet_value(ctx, 0, t) + inlet_value(ctx, 1, t); return CANOPY_OK; }
 }
 
-static float shift_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t shift_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet;
-    return canopy_inlet_at(ctx, 0, t + canopy_ctx_int(ctx, 0));
+    { *out = inlet_value(ctx, 0, t + canopy_ctx_int(ctx, 0)); return CANOPY_OK; }
 }
 
 static int32_t shift_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)
@@ -186,10 +186,11 @@ static int32_t shift_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1
     return canopy_inlet_span(ctx, 0, t0 + shift, t1 + shift, n, out);
 }
 
-static float failing_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t failing_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx; (void)outlet; (void)t;
-    return 5.0f;
+    *out = 5.0f;                                            /* garbage that the engine must replace with zero */
+    return FAILING_STATUS;
 }
 
 static int32_t failing_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)
@@ -225,10 +226,10 @@ float support_saw(int64_t t)
     return (float)((double)r * (2.0 / (double)SAW_PERIOD) - 1.0);
 }
 
-static float saw_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t saw_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx; (void)outlet;
-    return support_saw(t);
+    { *out = support_saw(t); return CANOPY_OK; }
 }
 
 float support_jitter(int64_t t)
@@ -238,10 +239,10 @@ float support_jitter(int64_t t)
     return (float)r / 1000.0f;
 }
 
-static float jitter_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t jitter_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx; (void)outlet;
-    return support_jitter(t);
+    { *out = support_jitter(t); return CANOPY_OK; }
 }
 
 static int tag_of(CanopyCtx *ctx, int32_t setting)
@@ -250,24 +251,24 @@ static int tag_of(CanopyCtx *ctx, int32_t setting)
     return (tag >= 0 && tag < SUPPORT_TAGS) ? (int)tag : 0;
 }
 
-static float counter_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t counter_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet; (void)t;
     support_counts[tag_of(ctx, 1)]++;
-    return (float)canopy_ctx_float(ctx, 0);
+    { *out = (float)canopy_ctx_float(ctx, 0); return CANOPY_OK; }
 }
 
-static float config_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t config_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx; (void)outlet; (void)t;
-    return 0.0f;                                            /* the settings are there to be changed, not read */
+    { *out = 0.0f; return CANOPY_OK; }                                            /* the settings are there to be changed, not read */
 }
 
-static float stamp_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t stamp_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet;
     support_stamps[tag_of(ctx, 0)] = canopy_ctx_upstream_stamp(ctx);
-    return canopy_ctx_int(ctx, 1) ? canopy_inlet_at(ctx, 0, t) : 0.0f;
+    { *out = canopy_ctx_int(ctx, 1) ? inlet_value(ctx, 0, t) : 0.0f; return CANOPY_OK; }
 }
 
 static void *source_create_shared(CanopyCtx *ctx)
@@ -286,11 +287,11 @@ static void source_destroy_shared(CanopyCtx *ctx, void *shared)
     support_shared_destroyed++;
 }
 
-static float source_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t source_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     const float *value = (const float *)canopy_ctx_shared(ctx);
     (void)outlet; (void)t;
-    return value ? *value : -1.0f;
+    { *out = value ? *value : -1.0f; return CANOPY_OK; }
 }
 
 static void source_action(CanopyCtx *ctx, const char *action)
@@ -318,11 +319,11 @@ static void state_destroy(CanopyCtx *ctx, void *state)
     support_state_destroyed++;
 }
 
-static float state_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t state_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     int *counter = (int *)canopy_ctx_state(ctx);
     (void)outlet; (void)t;
-    return counter ? (float)(++*counter) : -1.0f;
+    { *out = counter ? (float)(++*counter) : -1.0f; return CANOPY_OK; }
 }
 
 typedef struct { _Atomic(int *) data; } RetireShared;
@@ -353,7 +354,7 @@ static void retire_release(void *block)
     atomic_fetch_add(&support_released, 1);
 }
 
-static float retire_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t retire_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     RetireShared *shared = (RetireShared *)canopy_ctx_shared(ctx);
     int *number = atomic_load(&shared->data);
@@ -362,7 +363,7 @@ static float retire_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
         atomic_store(&support_inside, 1);
         while (atomic_load(&support_hold)) Sleep(0);
     }
-    return (float)*number;
+    { *out = (float)*number; return CANOPY_OK; }
 }
 
 static void retire_action(CanopyCtx *ctx, const char *action)
@@ -386,10 +387,10 @@ static void retire_action(CanopyCtx *ctx, const char *action)
     }
 }
 
-static float boundary_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t boundary_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet; (void)t;
-    return canopy_ctx_boundary_value(ctx);
+    { *out = canopy_ctx_boundary_value(ctx); return CANOPY_OK; }
 }
 
 static const CanopyOutletDesc OUT_ONE[] = {{"out", "Out"}};
@@ -551,6 +552,27 @@ CanopyRegistry *support_registry(void)
 }
 
 /* ---- the rig ---- */
+
+float host_inlet_at(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t)
+{
+    float value = 0.0f;
+    (void)canopy_instance_inlet_at(instance, node_id, inlet, t, &value);
+    return value;
+}
+
+float host_read_at(CanopyInstance *instance, const char *name, int64_t t)
+{
+    float value = 0.0f;
+    (void)canopy_instance_read_at(instance, name, t, &value);
+    return value;
+}
+
+float inlet_value(CanopyCtx *ctx, int32_t inlet, int64_t t)
+{
+    float value = 0.0f;
+    (void)canopy_inlet_at(ctx, inlet, t, &value);
+    return value;
+}
 
 void rig_open(Rig *rig)
 {

@@ -39,6 +39,7 @@ The project folder is `C:\Users\Argh\Documents\ai\projects\canopysynth`; the des
 
 - A point query on a node that implements only `query_span` is answered by the engine with a one-sample span query, `query_span(t, t, 1)`
   (0.0 if the status is nonzero). (Recorded here, not in the design: the author's permission to edit the design covered only the scratch rule.)
+  **Superseded after step 9** ("The point query reports a status"): the status is now passed on, and the design says so.
 - The typed settings getters read by setting INDEX: `canopy_ctx_int(ctx, index)`, `canopy_ctx_float(ctx, index)`, `canopy_ctx_string(ctx, index)`;
   the index is the setting's position in the descriptor (the engine's internal-rate setting comes last). A CHOICE reads as its chosen index through
   `canopy_ctx_int`; a wrong kind or a bad index returns 0, 0.0 or "".
@@ -57,7 +58,8 @@ The project folder is `C:\Users\Argh\Documents\ai\projects\canopysynth`; the des
   4. An instance refuses a second concurrent use, and a call from inside one of its own handlers, with `CANOPY_ERR_BUSY` (point queries answer
      0.0), because the GIL is released during ctypes calls and two Python threads sharing an instance would otherwise corrupt its scratch arena.
   5. Outside a query (create/destroy handlers, `on_action`) the context calls are harmless: `canopy_inlet_at` gives 0.0, `canopy_inlet_span`
-     `CANOPY_ERR_ARGUMENT` (zero-filled), `canopy_scratch` NULL; the settings getters and `canopy_ctx_shared` work.
+     `CANOPY_ERR_ARGUMENT` (zero-filled), `canopy_scratch` NULL; the settings getters and `canopy_ctx_shared` work. (Since the ABI 2 change below,
+     `canopy_inlet_at` returns `CANOPY_ERR_ARGUMENT` and writes 0.0, like the span call.)
   6. A scratch request that fails does not use up the node's declared count. The arena of a graph with a loop anywhere is sized for every node
      holding its buffers at once (the sum of the declared counts), and a descriptor that declares absurdly many buffers is refused at compile time.
   7. C11 atomics are used from step 3 (the knob slots), not step 4; `build.ps1` passes `/experimental:c11atomics` and `_CRT_SECURE_NO_WARNINGS`.
@@ -308,10 +310,10 @@ Choices of mine that the design leaves open (the author may veto any of them):
    before a buffer is allocated), a span that overflows, a node's own status, an instance in use; `ValueError` for a time that is not a whole number
    in 64 bits or an `n` that is not a whole number (as the public helper functions do); `TypeError` for a boundary value that is not a number;
    `MemoryError` when the engine runs out of memory; `RuntimeError` for use after `close()` and for closing an engine that still has open instances.
-4. **A point query on a busy instance raises `QueryError`** (status BUSY) instead of answering 0.0 as the C call does, so that sharing an instance
-   between threads is loud. To tell "no such boundary outlet" from an answer of 0.0 the bridge needed a C call with a status: **new exported function
-   `canopy_instance_read_at_status`** (`canopy_instance_read_at` is now a thin wrapper, unchanged in behaviour). A node that fails inside the graph
-   still answers 0.0 (design section 5).
+4. **A point query on a busy instance raises `QueryError`** (status BUSY) instead of answering 0.0 as the C call did, so that sharing an instance
+   between threads is loud. (First built with a new C call, `canopy_instance_read_at_status`, and with a node that fails inside the graph still
+   answering 0.0. **Superseded the same day, at the author's request, by "The point query reports a status" below**: the C call itself now returns the
+   status, `canopy_instance_read_at_status` is gone, and a node's failure raises `QueryError` too.)
 5. **What `audio` returns**: a memoryview over a new `array.array('f')` each call (format `'f'`, 4 bytes, writable: the caller owns it), so numpy can
    wrap it with no copy and a later call never overwrites an earlier result.
 6. **Lifetimes**: an `Instance` holds its `Engine`, so dropping them in any order is safe; the engine is freed when the last of them goes
@@ -319,6 +321,41 @@ Choices of mine that the design leaves open (the author may veto any of them):
    nothing. Calling `update()` and `close()` is for the editing thread (the Graph is not thread-safe); the other engine calls are safe from any
    thread; one instance is for one thread at a time. The GIL is released inside every C call.
 7. **Not in the bridge yet** (step 12): pressing a node's buttons, node messages, the preview's state, time, device list and warning, the audio backend.
+
+## The point query reports a status (ABI 2; decided with the author after step 9, build 12)
+
+The author asked for the design's "a point query cannot report an error" to go, and for the simplifications that follows. Design sections 5, 12 and 16
+were changed to match (marked in the text).
+1. **The contract.** `int query_at(ctx, outlet, t, float *out)` and `int canopy_inlet_at(ctx, inlet, t, float *out)`: the answer is written to `*out`
+   and the status returned, exactly as for spans. On every failure `*out` is 0.0 whatever the node wrote (spans are zero-filled). A bad inlet is
+   `CANOPY_ERR_PORT`; no query in progress, or a NULL `out`, is `CANOPY_ERR_ARGUMENT`. `CANOPY_ABI_VERSION` is 2 (the layout of the descriptor is
+   the same, the meaning of a handler is not, so a node built for version 1 is refused by the registry, and the Python `ABI_VERSION` is 2).
+2. **Host calls.** `canopy_instance_inlet_at(instance, node, inlet, t, &out)` and `canopy_instance_read_at(instance, name, t, &out)` return a status
+   (`CANOPY_ERR_NODE` for an unknown node ID or boundary outlet, `CANOPY_ERR_BUSY`, `CANOPY_ERR_ARGUMENT`, `CANOPY_ERR_PORT`, or the node's own).
+3. **What got simpler.** The engine's special case for a span-only node's point query (answered by a one-sample span, 0.0 on failure) is a plain
+   status pass-through; `canopy_instance_read_at_status` and its wrapper are gone; the Python bridge no longer treats a node's failure differently from
+   the host's (`value()` and `audio()` raise `QueryError` for every nonzero status, `BoundaryError` for a missing name); choice 4 of step 9 (busy)
+   is no longer a special rule; design sections 5, 12 and 16 say the same thing for both kinds of query.
+4. **A pointwise node's derived span** stops at the first sample whose point query fails: `out` is zero-filled and the status returned.
+5. **Nodes that do not care** may ignore the status (`out` is 0.0): the hidden test filter does, for its inputs, and so do the test nodes that mix
+   inlets (through `inlet_value` in `tests/c/support.c`).
+6. **The tests** use helpers that keep the old meaning (`host_inlet_at`, `host_read_at`, `inlet_value`: the answer, 0.0 on failure) where a test is
+   about values, and call the C functions themselves where it is about statuses; Python's `e.ctx_inlet_at`, `e.instance_inlet_at` and
+   `e.instance_read_at` do the same, with `_status` versions; a Python node's point handler returns a float or `(status, float)`.
+7. **Cost**, measured on the same machine against the code of the last commit (step 9, the old contract): the engine's derived span of 65536 pointwise
+   samples went from 2.95 to 3.35 ns per sample (+14%, 0.19 to 0.22 ms in all), a host point query from 8.7 to 9.1 ns.
+
+8. **Verified** (ran it): `python run_tests.py`: 335 passed, 0 failed (223 C tests, each run three times, plus 112 Python tests). New tests: statuses of
+   host and context point queries (unknown node, bad inlet, NULL arguments, a node that fails, a span-only node that fails), a pointwise node whose
+   point query fails ends the derived span at the first failure (calls counted), a boundary read of a failing node, a Python node's point handler
+   returning a status for both kinds of query, version 1 refused by the registry. The mutation check on the changed code: all 119 older entries
+   that target `canopy_instance.c`, `canopy_boundary.c`, `canopy_fileread.c` and `canopy_test_nodes.c` (steps 3 to 6; step 7 has none), the 14
+   whose text had moved re-pointed first, and the whole of `step9.py` (now 76: the 11 about the removed status function were replaced by 20 about the
+   new contract): 195 runs, all caught. Believed: that the hidden test filter's habit of ignoring an input's status is right for a real node (it is
+   what a mixer would do; no built-in node has an input it must fail on).
+   Mistakes of mine, corrected: my launcher for the parallel mutation copies did not start any job the first time (detached children with a quoting
+   error; found because no log appeared, relaunched through script files); a first throwaway benchmark would not link (two harness symbols); one of
+   my new tests assumed the wrong default knob.
 
 ## Questions still to ask, and where
 
@@ -651,8 +688,8 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
 - [x] ctypes loader with the version check (`_native.py`, over `_lib.load_dll`; every function's types declared); `Engine`, `new_instance`, `value`,
       `audio` (memoryview of float32), `set_boundary`, `boundary_nodes`, `update`, `close`, `QueryError`, `GraphError`; one instance per thread; the
       GIL released during queries (`canopysynth/engine.py`, `errors.py`). See "Decisions recorded at step 9".
-- [x] One new exported C function, `canopy_instance_read_at_status` (`canopy_engine.h`, `canopy_instance.c`), so that a missing boundary name can be told
-      from an answer of 0.0; the plain call is a wrapper over it.
+- [x] (Built with one new exported C function, `canopy_instance_read_at_status`, so that a missing boundary name can be told from an answer of 0.0.
+      Replaced by the ABI 2 change: the point query itself now returns a status.)
 - [x] Tests: `tests/python/test_bridge.py` (24 tests: the section 15 snippet as written against the model of a generated WAV file (point and span
       queries, reversed and 65536-sample spans, times beyond 32 bits, node IDs beyond 32 bits), compile faults with the engine's own sentences and
       no leak, `update` and a failed `update`, every setting kind and a choice as index reaching a node, a caller's registry, the boundary list
@@ -660,7 +697,7 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
       thread, three reader threads with a writer and 60 updates, the lifetimes in every order, and the engine's out-of-memory and odd statuses
       faked one by one around the real DLL), one C test in `tests/c/test_boundary.c`, `dev/mutation/step9.py`.
 - Verified (ran it): `python run_tests.py`: 331 passed, 0 failed: 220 C tests, each run three times (normal, debug heap, AddressSanitizer), plus 111
-  Python tests (24 new). The mutation check, `dev/mutation/step9.py`: 65 deliberate faults (the bridge, the native bindings, the exception, the new C
+  Python tests (24 new; 331 total then, 335 after the ABI 2 change below). The mutation check, `dev/mutation/step9.py`: 65 deliberate faults then (the bridge, the native bindings, the exception, the new C
   call), each followed by the suite: all detected. The first pass found two gaps in my tests, now closed (a faked failure of mine cascaded into a
   different `GraphError` anyway, so the test did not prove the failure was noticed; no test used a node ID beyond 32 bits), and one of my faults did
   not compile (rewritten). Two entries of step 5's spec pointed at the old body of the point read (the code was moved into the new function):

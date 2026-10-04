@@ -9,10 +9,11 @@
 #include <string.h>
 #include "canopy_core.h"
 
-static float inlet_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t inlet_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet; (void)t;
-    return canopy_ctx_boundary_value(ctx);
+    *out = canopy_ctx_boundary_value(ctx);
+    return CANOPY_OK;
 }
 
 static int32_t inlet_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)

@@ -9,7 +9,7 @@
 static uint64_t read_stamp(Rig *rig, int32_t sink_inlet, int tag)
 {
     support_stamps[tag] = 0;
-    (void)canopy_instance_inlet_at(rig->instance, 9, sink_inlet, 0);
+    (void)host_inlet_at(rig->instance, 9, sink_inlet, 0);
     return support_stamps[tag];
 }
 
@@ -52,7 +52,7 @@ static void test_c_the_stamp_is_stable_while_nothing_upstream_changes_and_differ
         CHECK(other != NULL);
         if (other) {
             support_stamps[0] = 0;
-            (void)canopy_instance_inlet_at(other, 9, 0, 0);
+            (void)host_inlet_at(other, 9, 0, 0);
             CHECK(support_stamps[0] == s0);                                  /* another instance sees the same digest */
             canopy_instance_free(other);
         }
@@ -150,9 +150,9 @@ static void test_c_a_boundary_write_changes_the_stamp_downstream_and_accepts_any
     rig_install(&rig);
     s0 = read_stamp(&rig, 0, 0);
     s1 = read_stamp(&rig, 1, 1);
-    CHECK(canopy_instance_inlet_at(rig.instance, 9, 0, 0) == 0.0f);          /* a boundary value starts at 0 */
+    CHECK(host_inlet_at(rig.instance, 9, 0, 0) == 0.0f);          /* a boundary value starts at 0 */
     CHECK_INT(canopy_engine_set_boundary_value(rig.engine, 5, 0.7f), CANOPY_OK);
-    CHECK(canopy_instance_inlet_at(rig.instance, 9, 0, 12345) == 0.7f);      /* the same value for any t */
+    CHECK(host_inlet_at(rig.instance, 9, 0, 12345) == 0.7f);      /* the same value for any t */
     s0b = read_stamp(&rig, 0, 0);
     CHECK(s0b != s0);
     CHECK(read_stamp(&rig, 1, 1) == s1);                                     /* the other chain is untouched */
@@ -162,11 +162,11 @@ static void test_c_a_boundary_write_changes_the_stamp_downstream_and_accepts_any
     wanted[3] = -0.0f;
     for (i = 0; i < 4; i++) {
         CHECK_INT(canopy_engine_set_boundary_value(rig.engine, 5, wanted[i]), CANOPY_OK);      /* any float, not clamped to -1..1 */
-        read_back[i] = canopy_instance_inlet_at(rig.instance, 9, 0, 0);
+        read_back[i] = host_inlet_at(rig.instance, 9, 0, 0);
         CHECK(float_bits(read_back[i]) == float_bits(wanted[i]));
     }
     CHECK_INT(canopy_engine_set_boundary_value(rig.engine, 5, NAN), CANOPY_OK);
-    CHECK(isnan(canopy_instance_inlet_at(rig.instance, 9, 0, 0)));
+    CHECK(isnan(host_inlet_at(rig.instance, 9, 0, 0)));
     CHECK_INT(canopy_engine_set_boundary_value(rig.engine, 77, 1.0f), CANOPY_ERR_NODE);
     CHECK_INT(canopy_engine_set_boundary_value(rig.engine, 3, 1.0f), CANOPY_ERR_ARGUMENT);   /* a gain has no boundary slot */
     CHECK_INT(canopy_engine_set_boundary_value(NULL, 5, 1.0f), CANOPY_ERR_ARGUMENT);
@@ -331,9 +331,9 @@ static void test_c_a_shared_resource_change_changes_the_stamp_downstream_only(vo
     rig_install(&rig);
     s0 = read_stamp(&rig, 0, 0);
     s1 = read_stamp(&rig, 1, 1);
-    CHECK(canopy_instance_inlet_at(rig.instance, 9, 0, 0) == 1.0f);
+    CHECK(host_inlet_at(rig.instance, 9, 0, 0) == 1.0f);
     CHECK_INT(canopy_engine_action(rig.engine, 1, "bump"), CANOPY_OK);        /* the "open a file" of a real node */
-    CHECK(canopy_instance_inlet_at(rig.instance, 9, 0, 0) == 2.0f);
+    CHECK(host_inlet_at(rig.instance, 9, 0, 0) == 2.0f);
     CHECK(read_stamp(&rig, 0, 0) != s0);
     CHECK(read_stamp(&rig, 1, 1) == s1);
     rig_close(&rig);
@@ -563,14 +563,14 @@ static void test_c_the_filter_matches_a_plain_recomputation_at_random_times_in_a
     lcg_state = 12345;
     for (q = 0; q < 500; q++) {
         int64_t t = random_time(-2000000000LL, 15000000000LL);
-        float got = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+        float got = host_inlet_at(rig.instance, 3, 0, t);
         if (float_bits(got) != float_bits(ref_out(&ref, t))) {
             ctest_current_failed = 1;
             printf("    query %d at t=%lld ns: got %g, a plain recomputation says %g\n", q, (long long)t, got, ref_out(&ref, t));
             break;
         }
     }
-    CHECK(canopy_instance_inlet_at(rig.instance, 3, 0, -5000000000LL) == 0.25f);       /* before t = 0 it is the initial value */
+    CHECK(host_inlet_at(rig.instance, 3, 0, -5000000000LL) == 0.25f);       /* before t = 0 it is the initial value */
     ref_free(&ref);
     rig_close(&rig);
 }
@@ -593,7 +593,7 @@ static void test_c_spans_of_any_density_and_direction_agree_with_the_plain_recom
             int64_t t = 0;
             CHECK_INT(canopy_sample_time(t0, t1, n, i, &t), CANOPY_OK);
             if (float_bits(g.data[i]) != float_bits(ref_out(&ref, t)) ||
-                float_bits(canopy_instance_inlet_at(rig.instance, 3, 0, t)) != float_bits(g.data[i])) {
+                float_bits(host_inlet_at(rig.instance, 3, 0, t)) != float_bits(g.data[i])) {
                 ctest_current_failed = 1;
                 printf("    span %d (t0=%lld t1=%lld n=%lld) sample %lld: %g, plain recomputation %g\n", q, (long long)t0, (long long)t1,
                        (long long)n, (long long)i, g.data[i], ref_out(&ref, t));
@@ -618,9 +618,9 @@ static void test_c_two_instances_answer_alike_whatever_each_was_asked_before(voi
     for (q = 0; other && q < 120; q++) {
         int64_t t = random_time(0, 12000000000LL);
         float a, b;
-        (void)canopy_instance_inlet_at(rig.instance, 3, 0, random_time(0, 12000000000LL));    /* the first has been asked other things */
-        a = canopy_instance_inlet_at(rig.instance, 3, 0, t);
-        b = canopy_instance_inlet_at(other, 3, 0, t);                                         /* the second asks cold */
+        (void)host_inlet_at(rig.instance, 3, 0, random_time(0, 12000000000LL));    /* the first has been asked other things */
+        a = host_inlet_at(rig.instance, 3, 0, t);
+        b = host_inlet_at(other, 3, 0, t);                                         /* the second asks cold */
         if (float_bits(a) != float_bits(b)) {
             ctest_current_failed = 1;
             printf("    at t=%lld ns two instances disagree: %g and %g\n", (long long)t, a, b);
@@ -651,7 +651,7 @@ static void counted_filter_rig(Rig *rig, int tag_offset)
 static int steps_for(Rig *rig, int64_t k)                         /* answers a query at grid sample k exactly and says how many inputs it read */
 {
     int before = support_counts[0];
-    (void)canopy_instance_inlet_at(rig->instance, 3, 0, grid_ns(k, 200));
+    (void)host_inlet_at(rig->instance, 3, 0, grid_ns(k, 200));
     return support_counts[0] - before;
 }
 
@@ -671,8 +671,8 @@ static void test_c_checkpoints_are_used_so_that_an_earlier_or_repeated_query_doe
     CHECK(steps > 0 && steps <= 13);                                   /* the start again: from the first checkpoint (the initial value) */
     steps = steps_for(&rig, 2000);
     CHECK(steps >= 1190 && steps <= 1210);                             /* ahead: from the last checkpoint made (sample 799) */
-    CHECK(float_bits(canopy_instance_inlet_at(rig.instance, 3, 0, grid_ns(2000, 200))) == float_bits(ref_out(&ref, grid_ns(2000, 200))));
-    CHECK(float_bits(canopy_instance_inlet_at(rig.instance, 3, 0, grid_ns(1050, 200))) == float_bits(ref_out(&ref, grid_ns(1050, 200))));
+    CHECK(float_bits(host_inlet_at(rig.instance, 3, 0, grid_ns(2000, 200))) == float_bits(ref_out(&ref, grid_ns(2000, 200))));
+    CHECK(float_bits(host_inlet_at(rig.instance, 3, 0, grid_ns(1050, 200))) == float_bits(ref_out(&ref, grid_ns(1050, 200))));
     ref_free(&ref);
     rig_close(&rig);
 }
@@ -701,8 +701,8 @@ static void two_filters(Rig *rig)
 
 static void query_both(Rig *rig, int64_t k)
 {
-    (void)canopy_instance_inlet_at(rig->instance, 3, 0, grid_ns(k, 200));
-    (void)canopy_instance_inlet_at(rig->instance, 3, 1, grid_ns(k, 200));
+    (void)host_inlet_at(rig->instance, 3, 0, grid_ns(k, 200));
+    (void)host_inlet_at(rig->instance, 3, 1, grid_ns(k, 200));
 }
 
 static void test_c_an_edit_upstream_of_one_filter_makes_that_filter_forget_and_not_the_other(void)
@@ -720,7 +720,7 @@ static void test_c_an_edit_upstream_of_one_filter_makes_that_filter_forget_and_n
     query_both(&rig, 1000);
     CHECK(support_counts[0] >= 1000);                                         /* filter 2 starts again... */
     CHECK_INT(support_counts[1], 0);                                          /* ...and filter 5 does not notice */
-    got = canopy_instance_inlet_at(rig.instance, 3, 0, grid_ns(1000, 200));
+    got = host_inlet_at(rig.instance, 3, 0, grid_ns(1000, 200));
     CHECK(float_bits(got) == float_bits(ref_out(&changed, grid_ns(1000, 200))));       /* and it is right, not stale */
     ref_free(&changed);
     rig_close(&rig);
@@ -756,13 +756,13 @@ static void test_c_a_setting_upstream_or_of_the_filter_itself_changed_by_a_new_g
     float first, second;
     int before;
     counted_filter_rig(&rig, 0);
-    first = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+    first = host_inlet_at(rig.instance, 3, 0, t);
     CHECK(float_bits(first) == float_bits(expected_const(200, 0.0f, 0.0f, 0.5f, t)));
     /* a setting of a node upstream */
     CHECK_INT(canopy_graph_set_float(rig.graph, 1, "value", 0.9), CANOPY_OK);
     install_again(&rig);
     before = support_counts[0];
-    second = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+    second = host_inlet_at(rig.instance, 3, 0, t);
     CHECK(support_counts[0] - before >= 900);                  /* it started again... */
     CHECK(float_bits(second) == float_bits(expected_const(200, 0.0f, 0.0f, 0.9f, t)));   /* ...and the answer is the new one, not a stale one */
     CHECK(float_bits(second) != float_bits(first));
@@ -770,21 +770,21 @@ static void test_c_a_setting_upstream_or_of_the_filter_itself_changed_by_a_new_g
     CHECK_INT(canopy_graph_set_float(rig.graph, 2, "initial", 0.5), CANOPY_OK);
     install_again(&rig);
     before = support_counts[0];
-    second = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+    second = host_inlet_at(rig.instance, 3, 0, t);
     CHECK(support_counts[0] - before >= 900);
     CHECK(float_bits(second) == float_bits(expected_const(200, 0.5f, 0.0f, 0.9f, t)));
     /* its internal sampling rate */
     CHECK_INT(canopy_graph_set_int(rig.graph, 2, "internal_sampling_rate", 100), CANOPY_OK);
     install_again(&rig);
     before = support_counts[0];
-    second = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+    second = host_inlet_at(rig.instance, 3, 0, t);
     CHECK(support_counts[0] - before >= 400);
     CHECK(float_bits(second) == float_bits(expected_const(100, 0.5f, 0.0f, 0.9f, t)));
     /* its checkpoint interval: the answer does not change, but what was stored was stored for another interval */
     CHECK_INT(canopy_graph_set_int(rig.graph, 2, "checkpoint_seconds", 5), CANOPY_OK);
     install_again(&rig);
     before = support_counts[0];
-    first = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+    first = host_inlet_at(rig.instance, 3, 0, t);
     CHECK(support_counts[0] - before >= 400);
     CHECK(float_bits(first) == float_bits(second));
     rig_close(&rig);
@@ -809,13 +809,13 @@ static void test_c_a_boundary_write_and_a_shared_resource_change_make_the_filter
         rig_install(&rig);
         if (pass == 0) {
             CHECK_INT(canopy_engine_set_boundary_value(rig.engine, 1, 0.25f), CANOPY_OK);
-            CHECK(float_bits(canopy_instance_inlet_at(rig.instance, 3, 0, t)) == float_bits(expected_const(200, 0.0f, 0.0f, 0.25f, t)));
+            CHECK(float_bits(host_inlet_at(rig.instance, 3, 0, t)) == float_bits(expected_const(200, 0.0f, 0.0f, 0.25f, t)));
             CHECK_INT(canopy_engine_set_boundary_value(rig.engine, 1, 0.75f), CANOPY_OK);
-            CHECK(float_bits(canopy_instance_inlet_at(rig.instance, 3, 0, t)) == float_bits(expected_const(200, 0.0f, 0.0f, 0.75f, t)));
+            CHECK(float_bits(host_inlet_at(rig.instance, 3, 0, t)) == float_bits(expected_const(200, 0.0f, 0.0f, 0.75f, t)));
         } else {
-            CHECK(float_bits(canopy_instance_inlet_at(rig.instance, 3, 0, t)) == float_bits(expected_const(200, 0.0f, 0.0f, 1.0f, t)));
+            CHECK(float_bits(host_inlet_at(rig.instance, 3, 0, t)) == float_bits(expected_const(200, 0.0f, 0.0f, 1.0f, t)));
             CHECK_INT(canopy_engine_action(rig.engine, 1, "bump"), CANOPY_OK);
-            CHECK(float_bits(canopy_instance_inlet_at(rig.instance, 3, 0, t)) == float_bits(expected_const(200, 0.0f, 0.0f, 2.0f, t)));
+            CHECK(float_bits(host_inlet_at(rig.instance, 3, 0, t)) == float_bits(expected_const(200, 0.0f, 0.0f, 2.0f, t)));
         }
         rig_close(&rig);
     }
@@ -832,7 +832,7 @@ static void test_c_installing_a_graph_that_changes_nothing_upstream_keeps_what_t
     rig_node(&rig, 7, "test.const");                           /* an unrelated node joins */
     install_again(&rig);
     before = support_counts[0];
-    (void)canopy_instance_inlet_at(rig.instance, 3, 0, grid_ns(1000, 200));
+    (void)host_inlet_at(rig.instance, 3, 0, grid_ns(1000, 200));
     CHECK_INT(support_counts[0] - before, 0);                  /* the instance adopted the new graph, and the filter's state came along intact */
     CHECK_INT(canopy_instance_graph_serial(rig.instance), canopy_engine_graph_serial(rig.engine));
     /* now the same filter, but fed by another counter: a different source upstream */
@@ -849,7 +849,7 @@ static void test_c_installing_a_graph_that_changes_nothing_upstream_keeps_what_t
     CHECK_INT(canopy_graph_connect(rewired, 2, "out", 3, "in0"), CANOPY_OK);
     CHECK_INT(canopy_engine_set_graph(rig.engine, rewired), CANOPY_OK);
     before = support_counts[1];
-    (void)canopy_instance_inlet_at(rig.instance, 3, 0, grid_ns(1000, 200));
+    (void)host_inlet_at(rig.instance, 3, 0, grid_ns(1000, 200));
     CHECK(support_counts[1] - before >= 1000);                 /* started again, reading the new counter */
     canopy_graph_free(rewired);
     rig_close(&rig);
@@ -869,7 +869,7 @@ static void test_c_the_filter_works_at_the_lowest_and_highest_internal_rates_and
         lcg_state = 99 + (uint32_t)r;
         for (q = 0; q < 80; q++) {
             int64_t t = random_time(-span_ns / 10, span_ns);
-            float got = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+            float got = host_inlet_at(rig.instance, 3, 0, t);
             if (float_bits(got) != float_bits(ref_out(&ref, t))) {
                 ctest_current_failed = 1;
                 printf("    rate %lld, t=%lld ns: got %g, plain recomputation %g\n", (long long)rate, (long long)t, got, ref_out(&ref, t));
@@ -902,7 +902,7 @@ static void test_c_a_checkpoint_interval_of_any_size_is_limited_so_that_nothing_
                 times[k - 1] = swap;
             }
         for (q = 0; q < TIMES; q++) {
-            float got = canopy_instance_inlet_at(rig.instance, 3, 0, times[q]);
+            float got = host_inlet_at(rig.instance, 3, 0, times[q]);
             if (float_bits(got) != float_bits(ref_out(&ref, times[q]))) {
                 ctest_current_failed = 1;
                 printf("    checkpoint_seconds %lld, t=%lld ns: got %g, plain recomputation %g\n", (long long)seconds[s], (long long)times[q], got,
@@ -929,7 +929,7 @@ static void test_c_the_filter_reads_its_input_at_grid_times_rounded_half_up_to_t
         filter_rig_with(&rig, "test.jitter", rate, 1, 0.1f, 0.3f, 0);
         for (k = 0; k + 2 < last; k++) {                                       /* exactly at every grid time... */
             int64_t t = grid_ns(k, rate);
-            float got = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+            float got = host_inlet_at(rig.instance, 3, 0, t);
             if (float_bits(got) != float_bits(ref_out(&ref, t))) {
                 ctest_current_failed = 1;
                 printf("    rate %lld, sample %lld (t=%lld ns): got %g, plain recomputation %g\n", (long long)rate, (long long)k, (long long)t,
@@ -940,7 +940,7 @@ static void test_c_the_filter_reads_its_input_at_grid_times_rounded_half_up_to_t
         lcg_state = 31 + (uint32_t)r;
         for (q = 0; q < 40; q++) {                                             /* ...and in between */
             int64_t t = random_time(0, grid_ns(last - 3, rate));
-            float got = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+            float got = host_inlet_at(rig.instance, 3, 0, t);
             if (float_bits(got) != float_bits(ref_out(&ref, t))) {
                 ctest_current_failed = 1;
                 printf("    rate %lld, t=%lld ns: got %g, plain recomputation %g\n", (long long)rate, (long long)t, got, ref_out(&ref, t));
@@ -963,7 +963,7 @@ static void test_c_a_coefficient_outside_the_range_of_a_knob_is_limited_to_what_
         filter_rig_with(&rig, "test.saw", 200, 2, 0.25f, coefs[c], 1);         /* the coefficient comes from a connected node: not limited to -1..1 */
         for (k = 0; k < 300; k++) {
             int64_t t = grid_ns(k, 200);
-            float got = canopy_instance_inlet_at(rig.instance, 3, 0, t);
+            float got = host_inlet_at(rig.instance, 3, 0, t);
             CHECK(float_bits(got) == float_bits(ref_out(&ref, t)));
             if (c == 0) CHECK(fabsf(got - support_saw(t)) < 3.0e-7f);          /* (3 + 1) / 2 = 2 is limited to 1: the output follows the input */
             else CHECK(got == 0.25f);                                          /* (-3 + 1) / 2 = -1 is limited to 0: it never leaves the initial value */

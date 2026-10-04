@@ -28,7 +28,7 @@ static struct {
     int reads;
 } reading;
 
-static float settings_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t settings_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet; (void)t;
     reading.count = canopy_ctx_int(ctx, 0);
@@ -49,7 +49,7 @@ static float settings_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
     strncpy(reading.string_low, canopy_ctx_string(ctx, -1), sizeof reading.string_low - 1);
     strncpy(reading.string_high, canopy_ctx_string(ctx, 99), sizeof reading.string_high - 1);
     reading.reads++;
-    return 0.0f;
+    { *out = 0.0f; return CANOPY_OK; }
 }
 
 static CanopyNodeType settings_type(void)
@@ -65,7 +65,7 @@ static CanopyNodeType settings_type(void)
 static void read_settings(Rig *rig, int64_t sink)
 {
     memset(&reading, 0, sizeof reading);
-    (void)canopy_instance_inlet_at(rig->instance, sink, 0, 0);
+    (void)host_inlet_at(rig->instance, sink, 0, 0);
     CHECK_INT(reading.reads, 1);
 }
 
@@ -308,7 +308,7 @@ static void test_c_an_empty_graph_compiles_and_has_an_instance_that_answers_noth
     rig_install(&rig);
     CHECK_INT(canopy_engine_node_count(rig.engine), 0);
     CHECK_INT(canopy_instance_arena_floats(rig.instance), 0);
-    CHECK(canopy_instance_inlet_at(rig.instance, 1, 0, 0) == 0.0f);
+    CHECK(host_inlet_at(rig.instance, 1, 0, 0) == 0.0f);
     CHECK_INT(canopy_instance_inlet_span(rig.instance, 1, 0, 0, 10, 4, out), CANOPY_ERR_NODE);
     CHECK(out[0] == 0.0f && out[3] == 0.0f);
     rig_close(&rig);
@@ -324,18 +324,18 @@ static void test_c_a_failed_compile_leaves_the_installed_graph_and_its_instances
     rig_connect(&rig, 1, "out", 2, "in0");
     CHECK_INT(canopy_graph_set_float(rig.graph, 1, "value", 0.75), CANOPY_OK);
     rig_install(&rig);
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 5) == 0.75f);
+    CHECK(host_inlet_at(rig.instance, 2, 0, 5) == 0.75f);
     broken = canopy_graph_new();
     CHECK_INT(canopy_graph_add_node(broken, 1, "no.such.type"), CANOPY_OK);
     CHECK_INT(canopy_engine_set_graph(rig.engine, broken), CANOPY_ERR_GRAPH);
     CHECK(strstr(canopy_engine_last_error(rig.engine), "no.such.type") != NULL);
     CHECK_INT(canopy_engine_node_count(rig.engine), 2);                       /* the first graph is still the installed one */
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 5) == 0.75f);
+    CHECK(host_inlet_at(rig.instance, 2, 0, 5) == 0.75f);
     {
         CanopyInstance *another = canopy_engine_new_instance(rig.engine);   /* and a new instance gets that graph */
         CHECK(another != NULL);
         if (another) {
-            CHECK(canopy_instance_inlet_at(another, 2, 0, 5) == 0.75f);
+            CHECK(host_inlet_at(another, 2, 0, 5) == 0.75f);
             canopy_instance_free(another);
         }
     }
@@ -433,9 +433,9 @@ static void test_c_installing_another_graph_keeps_knobs_by_node_id_and_the_descr
     CHECK(value == 0.75f);
     CHECK_INT((long long)generation, 3);
     /* the instance made on the first graph shares the knob slot: it sees the current position */
-    CHECK(canopy_instance_inlet_at(old_instance, 2, 1, 0) == 0.75f);
+    CHECK(host_inlet_at(old_instance, 2, 1, 0) == 0.75f);
     CHECK_INT(canopy_engine_set_knob(rig.engine, 2, 1, -0.5f), CANOPY_OK);
-    CHECK(canopy_instance_inlet_at(old_instance, 2, 1, 0) == -0.5f);
+    CHECK(host_inlet_at(old_instance, 2, 1, 0) == -0.5f);
     canopy_instance_free(old_instance);
     canopy_graph_free(second);
     rig_close(&rig);
@@ -472,8 +472,9 @@ static char life_last_action[40];
 
 static void check_setup_context(CanopyCtx *ctx)
 {
-    float buffer[4] = {9.0f, 9.0f, 9.0f, 9.0f};
-    if (canopy_inlet_at(ctx, 0, 5) != 0.0f) life_setup_failures++;
+    float buffer[4] = {9.0f, 9.0f, 9.0f, 9.0f}, point = 9.0f;
+    if (canopy_inlet_at(ctx, 0, 5, &point) != CANOPY_ERR_ARGUMENT || point != 0.0f) life_setup_failures++;
+    if (canopy_inlet_at(ctx, 0, 5, NULL) != CANOPY_ERR_ARGUMENT) life_setup_failures++;
     if (canopy_inlet_span(ctx, 0, 0, 10, 4, buffer) != CANOPY_ERR_ARGUMENT) life_setup_failures++;
     if (buffer[0] != 0.0f || buffer[1] != 0.0f || buffer[2] != 0.0f || buffer[3] != 0.0f) life_setup_failures++;
     if (canopy_scratch(ctx, 4) != NULL) life_setup_failures++;
@@ -519,15 +520,15 @@ static void life_destroy_instance(CanopyCtx *ctx, void *state)
     life_state_destroyed++;
 }
 
-static float life_query(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t life_query(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     int *shared = (int *)canopy_ctx_shared(ctx);
     int *state = (int *)canopy_ctx_state(ctx);
     (void)outlet; (void)t;
-    if (!shared || !state) return -1.0f;
+    if (!shared || !state) { *out = -1.0f; return CANOPY_OK; }
     (*shared)++;
     (*state)++;
-    return (float)(*shared * 1000 + *state);
+    { *out = (float)(*shared * 1000 + *state); return CANOPY_OK; }
 }
 
 static void life_action(CanopyCtx *ctx, const char *action)
@@ -581,11 +582,11 @@ static void test_c_shared_resources_are_made_once_per_node_and_instance_state_on
     CHECK_INT(life_shared_created, 2);                                        /* a new instance makes no new shared resources... */
     CHECK_INT(life_state_created, 4);                                         /* ...only new instance state */
     /* node 1 through the first instance: shared counter 7 -> 8, state counter 3 -> 4 */
-    CHECK_INT(canopy_instance_inlet_at(rig.instance, 3, 0, 0), 8004);
+    CHECK_INT(host_inlet_at(rig.instance, 3, 0, 0), 8004);
     /* the second instance shares the node's resource (8 -> 9) but has its own state (3 -> 4) */
-    CHECK_INT(canopy_instance_inlet_at(second, 3, 0, 0), 9004);
-    CHECK_INT(canopy_instance_inlet_at(rig.instance, 3, 0, 0), 10005);        /* the first instance's own state goes on counting */
-    CHECK_INT(canopy_instance_inlet_at(rig.instance, 3, 1, 0), 21004);        /* node 2 has resources and state of its own (its seed is 20) */
+    CHECK_INT(host_inlet_at(second, 3, 0, 0), 9004);
+    CHECK_INT(host_inlet_at(rig.instance, 3, 0, 0), 10005);        /* the first instance's own state goes on counting */
+    CHECK_INT(host_inlet_at(rig.instance, 3, 1, 0), 21004);        /* node 2 has resources and state of its own (its seed is 20) */
     canopy_instance_free(second);
     CHECK_INT(life_state_destroyed, 2);                                       /* one instance's states are destroyed with it */
     CHECK_INT(life_shared_destroyed, 0);
@@ -610,14 +611,14 @@ static void test_c_installing_the_same_graph_again_keeps_each_nodes_shared_resou
     rig_connect(&rig, 1, "out", 2, "in0");
     rig_install(&rig);
     CHECK_INT(life_shared_created, 1);
-    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 0, 0), 8004);        /* the shared counter goes 7 -> 8 */
+    CHECK_INT(host_inlet_at(rig.instance, 2, 0, 0), 8004);        /* the shared counter goes 7 -> 8 */
     rig_install(&rig);                                                        /* the same graph again, and a fresh instance */
     CHECK_INT(life_shared_created, 1);                                        /* no second resource... */
-    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 0, 0), 9004);         /* ...the very same one: its counter goes on (9), the state is new (4) */
+    CHECK_INT(host_inlet_at(rig.instance, 2, 0, 0), 9004);         /* ...the very same one: its counter goes on (9), the state is new (4) */
     rig_node(&rig, 3, "test.life");                                           /* a new node joins the description */
     rig_install(&rig);
     CHECK_INT(life_shared_created, 2);
-    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 0, 0), 10004);
+    CHECK_INT(host_inlet_at(rig.instance, 2, 0, 0), 10004);
     CHECK_INT(life_shared_destroyed, 0);                                      /* nothing is destroyed before the engine is */
     rig_close(&rig);
     CHECK_INT(life_shared_destroyed, 2);
@@ -678,7 +679,7 @@ static void test_c_an_instance_made_before_another_graph_was_installed_adopts_it
     rig_node(&rig, 2, "test.sink");
     rig_connect(&rig, 1, "out", 2, "in0");
     rig_install(&rig);
-    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 0, 0), 8004);
+    CHECK_INT(host_inlet_at(rig.instance, 2, 0, 0), 8004);
     CHECK_INT(canopy_graph_add_node(second, 1, "test.const"), CANOPY_OK);       /* node 1 is now another type */
     CHECK_INT(canopy_graph_add_node(second, 2, "test.sink"), CANOPY_OK);
     CHECK_INT(canopy_graph_connect(second, 1, "out", 2, "in0"), CANOPY_OK);
@@ -689,11 +690,11 @@ static void test_c_an_instance_made_before_another_graph_was_installed_adopts_it
         CanopyInstance *fresh = canopy_engine_new_instance(rig.engine);
         CHECK(fresh != NULL);
         if (fresh) {
-            CHECK(canopy_instance_inlet_at(fresh, 2, 0, 0) == 0.5f);            /* a new instance runs the new graph at once */
+            CHECK(host_inlet_at(fresh, 2, 0, 0) == 0.5f);            /* a new instance runs the new graph at once */
             canopy_instance_free(fresh);
         }
     }
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 0) == 0.5f);             /* the old instance adopts it at its next query: node 1 is a constant now */
+    CHECK(host_inlet_at(rig.instance, 2, 0, 0) == 0.5f);             /* the old instance adopts it at its next query: node 1 is a constant now */
     CHECK_INT(life_shared_destroyed, 0);                                         /* (a query frees nothing) */
     CHECK_INT(canopy_engine_collect(rig.engine), 1);
     CHECK_INT(life_shared_destroyed, 1);                                         /* nobody can use the life node now: its resource and state are freed */
@@ -732,7 +733,7 @@ static void test_c_the_functions_refuse_null_arguments_without_crashing(void)
     CHECK(canopy_engine_new_instance(NULL) == NULL);
     canopy_instance_free(NULL);
     CHECK_INT(canopy_instance_arena_floats(NULL), 0);
-    CHECK(canopy_instance_inlet_at(NULL, 1, 0, 0) == 0.0f);
+    CHECK(host_inlet_at(NULL, 1, 0, 0) == 0.0f);
     CHECK_INT(canopy_instance_inlet_span(NULL, 1, 0, 0, 10, 2, out), CANOPY_ERR_ARGUMENT);
     CHECK(out[0] == 0.0f && out[1] == 0.0f);                                  /* the output is zero-filled even then */
     CHECK_INT(canopy_engine_free(NULL), CANOPY_OK);

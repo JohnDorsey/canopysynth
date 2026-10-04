@@ -41,8 +41,8 @@ static void test_c_an_unconnected_inlet_answers_with_its_knob_for_points_and_spa
     rig_node(&rig, 1, "test.sink");                                        /* in0 starts at 0.0, in1 at 0.5 (their declared defaults) */
     rig_install(&rig);
     for (i = 0; i < sizeof times / sizeof times[0]; i++) {
-        CHECK(canopy_instance_inlet_at(rig.instance, 1, 0, times[i]) == 0.0f);
-        CHECK(canopy_instance_inlet_at(rig.instance, 1, 1, times[i]) == 0.5f);
+        CHECK(host_inlet_at(rig.instance, 1, 0, times[i]) == 0.0f);
+        CHECK(host_inlet_at(rig.instance, 1, 1, times[i]) == 0.5f);
     }
     for (c = 0; c < sizeof counts / sizeof counts[0]; c++) {
         Guarded g = guarded_new(counts[c]);
@@ -64,8 +64,8 @@ static void test_c_an_unconnected_inlet_answers_with_its_knob_for_points_and_spa
     }
     CHECK_INT(canopy_engine_set_knob(rig.engine, 1, 1, -0.25f), CANOPY_OK);
     CHECK_INT(canopy_engine_set_knob(rig.engine, 1, 0, 0.125f), CANOPY_OK);
-    CHECK(canopy_instance_inlet_at(rig.instance, 1, 1, 99) == -0.25f);          /* a knob move takes effect on the next query */
-    CHECK(canopy_instance_inlet_at(rig.instance, 1, 0, 99) == 0.125f);
+    CHECK(host_inlet_at(rig.instance, 1, 1, 99) == -0.25f);          /* a knob move takes effect on the next query */
+    CHECK(host_inlet_at(rig.instance, 1, 0, 99) == 0.125f);
     {
         Guarded g = guarded_new(3);
         const float expected[3] = {-0.25f, -0.25f, -0.25f};
@@ -88,10 +88,10 @@ static void test_c_a_connected_inlet_gets_the_outlets_answer_and_ignores_its_own
     CHECK_INT(canopy_graph_set_float(rig.graph, 1, "value", 3.5), CANOPY_OK);
     CHECK_INT(canopy_graph_set_knob(rig.graph, 2, "in0", 0.9f), CANOPY_OK);
     rig_install(&rig);
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 12345) == 3.5f);
+    CHECK(host_inlet_at(rig.instance, 2, 0, 12345) == 3.5f);
     CHECK_INT(host_span(&rig, 0, 0, 40, 5, &g), CANOPY_OK);
     CHECK(guarded_equals(&g, expected));
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 1, 1) == 0.5f);               /* the unconnected neighbour still answers its knob */
+    CHECK(host_inlet_at(rig.instance, 2, 1, 1) == 0.5f);               /* the unconnected neighbour still answers its knob */
     guarded_free(&g);
     rig_close(&rig);
 }
@@ -144,10 +144,10 @@ static void test_c_point_queries_reach_the_node_and_the_right_outlet(void)
 {
     Rig rig;
     time_to_sink(&rig);
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 10) == 10.0f);
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 1, 10) == 20.0f);
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, -7) == -7.0f);
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 1, -7) == -14.0f);
+    CHECK(host_inlet_at(rig.instance, 2, 0, 10) == 10.0f);
+    CHECK(host_inlet_at(rig.instance, 2, 1, 10) == 20.0f);
+    CHECK(host_inlet_at(rig.instance, 2, 0, -7) == -7.0f);
+    CHECK(host_inlet_at(rig.instance, 2, 1, -7) == -14.0f);
     rig_close(&rig);
 }
 
@@ -196,7 +196,7 @@ static void test_c_the_span_of_a_pointwise_node_is_one_point_query_per_sample_ti
     check_one_point_call_per_sample(&rig, 0, INT64_MIN, CANOPY_MAX_N);
     check_one_point_call_per_sample(&rig, -1, INT64_MAX - 1, 4097);
     support_calls_reset();
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 77) == 0.5f);                /* a point query is one point call, not a span */
+    CHECK(host_inlet_at(rig.instance, 2, 0, 77) == 0.5f);                /* a point query is one point call, not a span */
     CHECK_INT(support_ncalls, 1);
     CHECK(support_calls[0].is_span == 0 && support_calls[0].t0 == 77);
     rig_close(&rig);
@@ -218,22 +218,60 @@ static void test_c_a_span_only_node_gets_the_span_and_answers_a_point_query_with
     CHECK_INT(support_ncalls, 1);
     CHECK(support_calls[0].is_span && support_calls[0].t0 == 0 && support_calls[0].t1 == 100 && support_calls[0].n == 4);
     support_calls_reset();
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 77) == 0.25f);
+    CHECK(host_inlet_at(rig.instance, 2, 0, 77) == 0.25f);
     CHECK_INT(support_ncalls, 1);
     CHECK(support_calls[0].is_span && support_calls[0].t0 == 77 && support_calls[0].t1 == 77 && support_calls[0].n == 1);
     guarded_free(&g);
     rig_close(&rig);
 }
 
-static void test_c_a_span_only_node_that_fails_answers_a_point_query_with_zero(void)
+static void test_c_a_span_only_node_that_fails_reports_its_status_for_a_point_query_and_the_answer_is_zero(void)
 {
     Rig rig;
+    float value = 9.0f;
     rig_open(&rig);
     rig_node(&rig, 1, "test.failing_span_only");
     rig_node(&rig, 2, "test.sink");
     rig_connect(&rig, 1, "out", 2, "in0");
     rig_install(&rig);
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 5) == 0.0f);             /* the node scribbled 123 and returned a status */
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 0, 5, &value), FAILING_STATUS);     /* the node scribbled 123 and returned a status */
+    CHECK(value == 0.0f);
+    rig_close(&rig);
+}
+
+static void test_c_a_point_query_reports_statuses_like_a_span_query_and_the_answer_is_zero_when_it_fails(void)
+{
+    Rig rig;
+    float value = 9.0f;
+    rig_open(&rig);
+    rig_node(&rig, 1, "test.const");
+    rig_node(&rig, 2, "test.sink");
+    rig_node(&rig, 3, "test.failing");
+    rig_node(&rig, 4, "test.sink");
+    rig_connect(&rig, 1, "out", 2, "in0");
+    rig_connect(&rig, 3, "out", 4, "in0");
+    CHECK_INT(canopy_graph_set_float(rig.graph, 1, "value", 0.375), CANOPY_OK);
+    rig_install(&rig);
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 0, 7, &value), CANOPY_OK);          /* a connected inlet */
+    CHECK(value == 0.375f);
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 1, 7, &value), CANOPY_OK);          /* an unconnected one: its knob (0.5 by default) */
+    CHECK(value == 0.5f);
+    value = 9.0f;
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 4, 0, 7, &value), FAILING_STATUS);     /* the node wrote 5.0 and failed: the status, and zero */
+    CHECK(value == 0.0f);
+    value = 9.0f;
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 99, 7, &value), CANOPY_ERR_PORT);
+    CHECK(value == 0.0f);
+    value = 9.0f;
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, -1, 7, &value), CANOPY_ERR_PORT);
+    CHECK(value == 0.0f);
+    value = 9.0f;
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 77, 0, 7, &value), CANOPY_ERR_NODE);   /* no such node */
+    CHECK(value == 0.0f);
+    value = 9.0f;
+    CHECK_INT(canopy_instance_inlet_at(NULL, 2, 0, 7, &value), CANOPY_ERR_ARGUMENT);
+    CHECK(value == 0.0f);
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 0, 7, NULL), CANOPY_ERR_ARGUMENT);
     rig_close(&rig);
 }
 
@@ -282,9 +320,9 @@ static void test_c_bad_span_arguments_from_the_host_give_the_documented_status_a
     CHECK_INT(canopy_instance_inlet_span(rig.instance, 99, 0, -2, INT64_MAX, 8, g.data), CANOPY_ERR_OVERFLOW);
     CHECK(guarded_all_zero(&g) && guarded_guards_intact(&g));
     /* point queries cannot report an error: they return 0.0 */
-    CHECK(canopy_instance_inlet_at(rig.instance, 99, 0, 5) == 0.0f);
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 2, 5) == 0.0f);
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, -1, 5) == 0.0f);
+    CHECK(host_inlet_at(rig.instance, 99, 0, 5) == 0.0f);
+    CHECK(host_inlet_at(rig.instance, 2, 2, 5) == 0.0f);
+    CHECK(host_inlet_at(rig.instance, 2, -1, 5) == 0.0f);
     guarded_free(&g);
     rig_close(&rig);
 }
@@ -340,17 +378,18 @@ static struct {
     int32_t inlet;
     int64_t t, t0, t1, n;
     float *out;
-    int32_t status;
+    int32_t status, point_status;
     float point;
     int calls;
 } probe;
 
-static float probe_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t probe_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet; (void)t;
-    probe.point = canopy_inlet_at(ctx, probe.inlet, probe.t);
+    probe.point = 9.0f;                                                       /* (to see that a failure sets it to zero) */
+    probe.point_status = canopy_inlet_at(ctx, probe.inlet, probe.t, &probe.point);
     probe.calls++;
-    return 1.0f;
+    { *out = 1.0f; return CANOPY_OK; }
 }
 
 static int32_t probe_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)
@@ -444,16 +483,19 @@ static void test_c_a_node_gets_the_same_statuses_through_its_context_whether_or_
             CHECK(g.data[0] == 0.25f && g.data[3] == 0.25f);
         }
         CHECK(guarded_guards_intact(&g));
-        /* point queries through the context: a bad inlet reads 0.0 */
+        /* point queries through the context: a bad inlet is CANOPY_ERR_PORT and reads 0.0, as for a span */
         probe.t = 40;
         probe.inlet = 5;
-        CHECK(canopy_instance_inlet_at(rig.instance, 4, which, 0) == 1.0f);
+        CHECK(host_inlet_at(rig.instance, 4, which, 0) == 1.0f);
+        CHECK_INT(probe.point_status, CANOPY_ERR_PORT);
         CHECK(probe.point == 0.0f);
         probe.inlet = -3;
-        CHECK(canopy_instance_inlet_at(rig.instance, 4, which, 0) == 1.0f);
+        CHECK(host_inlet_at(rig.instance, 4, which, 0) == 1.0f);
+        CHECK_INT(probe.point_status, CANOPY_ERR_PORT);
         CHECK(probe.point == 0.0f);
         probe.inlet = 0;
-        CHECK(canopy_instance_inlet_at(rig.instance, 4, which, 0) == 1.0f);
+        CHECK(host_inlet_at(rig.instance, 4, which, 0) == 1.0f);
+        CHECK_INT(probe.point_status, CANOPY_OK);
         CHECK(probe.point == (which == 0 ? 40.0f : 0.25f));
     }
     guarded_free(&g);
@@ -482,7 +524,55 @@ static void test_c_a_status_from_a_node_is_passed_through_unchanged_and_the_engi
     CHECK_INT(canopy_instance_inlet_span(rig.instance, 3, 1, 0, 100, 16, g.data), FAILING_STATUS);
     CHECK(guarded_all_zero(&g));                       /* passed on through the gain node's context call */
     CHECK(guarded_guards_intact(&g));
-    CHECK(canopy_instance_inlet_at(rig.instance, 3, 0, 1) == 5.0f);        /* the point handler of the same node works */
+    {
+        float value = 9.0f;
+        CHECK_INT(canopy_instance_inlet_at(rig.instance, 3, 0, 1, &value), FAILING_STATUS);     /* a point query fails with the same status... */
+        CHECK(value == 0.0f);                                                                   /* ...and the 5.0 the node wrote is replaced by zero */
+    }
+    guarded_free(&g);
+    rig_close(&rig);
+}
+
+static struct { int64_t fail_from; int calls; } pointwise;
+
+static int32_t pointwise_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
+{
+    (void)ctx; (void)outlet;
+    pointwise.calls++;
+    *out = (float)t + 1000.0f;                                       /* a value that must not survive a failure */
+    return t >= pointwise.fail_from ? FAILING_STATUS : CANOPY_OK;
+}
+
+static void test_c_a_pointwise_node_whose_point_query_fails_fails_the_derived_span_at_the_first_failure_and_it_is_zero_filled(void)
+{
+    Rig rig;
+    CanopyNodeType type = support_base_type("test.pointwise", "Pointwise");
+    Guarded g = guarded_new(10);
+    float value = 9.0f;
+    int i;
+    type.n_outlets = 1; type.outlets = PROBE_OUT;
+    type.handlers.query_at = pointwise_at;                          /* no span handler: the engine asks once per sample time */
+    rig_open(&rig);
+    support_add_type(rig.registry, &type);
+    rig_node(&rig, 1, "test.pointwise");
+    rig_node(&rig, 2, "test.sink");
+    rig_connect(&rig, 1, "out", 2, "in0");
+    rig_install(&rig);
+    pointwise.fail_from = 1000;                                      /* never fails: the span is 0, 10, ... 90 (plus 1000) */
+    pointwise.calls = 0;
+    CHECK_INT(canopy_instance_inlet_span(rig.instance, 2, 0, 0, 100, 10, g.data), CANOPY_OK);
+    CHECK(pointwise.calls == 10);
+    for (i = 0; i < 10; i++) CHECK(g.data[i] == 1000.0f + 10.0f * (float)i);
+    pointwise.fail_from = 50;                                        /* the sixth sample (t = 50) fails */
+    pointwise.calls = 0;
+    CHECK_INT(canopy_instance_inlet_span(rig.instance, 2, 0, 0, 100, 10, g.data), FAILING_STATUS);
+    CHECK(pointwise.calls == 6);                                     /* it stopped at the first failure */
+    CHECK(guarded_all_zero(&g));                                     /* and the five good samples it had written are zero too */
+    CHECK(guarded_guards_intact(&g));
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 0, 49, &value), CANOPY_OK);
+    CHECK(value == 1049.0f);
+    CHECK_INT(canopy_instance_inlet_at(rig.instance, 2, 0, 50, &value), FAILING_STATUS);
+    CHECK(value == 0.0f);
     guarded_free(&g);
     rig_close(&rig);
 }
@@ -513,15 +603,15 @@ static void test_c_a_node_may_query_later_or_earlier_times_than_it_was_asked(voi
     CHECK_INT(canopy_graph_set_int(rig.graph, 4, "shift", 20), CANOPY_OK);
     CHECK_INT(canopy_graph_set_int(rig.graph, 5, "shift", -500), CANOPY_OK);
     rig_install(&rig);
-    CHECK(canopy_instance_inlet_at(rig.instance, 3, 0, 5) == 1005.0f);
-    CHECK(canopy_instance_inlet_at(rig.instance, 3, 1, 5) == -495.0f);
+    CHECK(host_inlet_at(rig.instance, 3, 0, 5) == 1005.0f);
+    CHECK(host_inlet_at(rig.instance, 3, 1, 5) == -495.0f);
     CHECK_INT(canopy_instance_inlet_span(rig.instance, 3, 0, 0, 100, 4, g.data), CANOPY_OK);
     CHECK(guarded_equals(&g, ahead));
     CHECK_INT(canopy_instance_inlet_span(rig.instance, 3, 1, 100, 0, 4, g.data), CANOPY_OK);
     CHECK(guarded_equals(&g, behind_reversed));
     CHECK_INT(canopy_instance_inlet_span(rig.instance, 6, 0, 0, 100, 4, g.data), CANOPY_OK);
     CHECK(guarded_equals(&g, chained));
-    CHECK(canopy_instance_inlet_at(rig.instance, 6, 0, 5) == 1025.0f);
+    CHECK(host_inlet_at(rig.instance, 6, 0, 5) == 1025.0f);
     guarded_free(&g);
     rig_close(&rig);
 }
@@ -545,8 +635,8 @@ static void test_c_one_outlet_may_feed_many_inlets_and_every_consumer_gets_its_o
     rig_connect(&rig, 2, "out", 4, "in0");
     rig_connect(&rig, 3, "out", 4, "in1");
     rig_install(&rig);
-    CHECK(canopy_instance_inlet_at(rig.instance, 4, 0, 21) == 42.0f);
-    CHECK(canopy_instance_inlet_at(rig.instance, 4, 1, 21) == 882.0f);
+    CHECK(host_inlet_at(rig.instance, 4, 0, 21) == 42.0f);
+    CHECK(host_inlet_at(rig.instance, 4, 1, 21) == 882.0f);
     CHECK_INT(canopy_instance_inlet_span(rig.instance, 4, 0, 0, 100, 4, g.data), CANOPY_OK);
     CHECK(guarded_equals(&g, doubled));
     CHECK_INT(canopy_instance_inlet_span(rig.instance, 4, 1, 0, 100, 4, g.data), CANOPY_OK);
@@ -589,17 +679,17 @@ static void test_c_the_same_query_returns_identical_floats_every_time_and_in_eve
     int round;
     build_mixed_graph(&rig);
     CHECK_INT(canopy_instance_inlet_span(rig.instance, 6, 0, -5000, 77777, 1000, first.data), CANOPY_OK);
-    point = canopy_instance_inlet_at(rig.instance, 6, 0, 12345);
+    point = host_inlet_at(rig.instance, 6, 0, 12345);
     for (round = 0; round < 3; round++) {
         CHECK_INT(canopy_instance_inlet_span(rig.instance, 6, 0, 3, 99999, 37, noise.data), CANOPY_OK);      /* other queries in between... */
-        (void)canopy_instance_inlet_at(rig.instance, 6, 0, -1);
+        (void)host_inlet_at(rig.instance, 6, 0, -1);
         CHECK_INT(canopy_engine_set_knob(rig.engine, 2, 1, -0.9f), CANOPY_OK);                               /* ...and a knob moved away... */
         CHECK_INT(canopy_instance_inlet_span(rig.instance, 6, 0, -5000, 77777, 1000, again.data), CANOPY_OK);
         CHECK(!guarded_bits_equal(&first, &again));                                                          /* (it did change the answer) */
         CHECK_INT(canopy_engine_set_knob(rig.engine, 2, 1, 0.3f), CANOPY_OK);                                /* ...and back */
         CHECK_INT(canopy_instance_inlet_span(rig.instance, 6, 0, -5000, 77777, 1000, again.data), CANOPY_OK);
         CHECK(guarded_bits_equal(&first, &again));
-        CHECK(float_bits(canopy_instance_inlet_at(rig.instance, 6, 0, 12345)) == float_bits(point));
+        CHECK(float_bits(host_inlet_at(rig.instance, 6, 0, 12345)) == float_bits(point));
     }
     second = canopy_engine_new_instance(rig.engine);                         /* another instance of the same engine... */
     CHECK(second != NULL);
@@ -649,7 +739,7 @@ static void test_c_the_order_in_which_a_graph_is_described_does_not_change_its_a
     CHECK_INT(canopy_instance_inlet_span(forward.instance, 6, 0, -123456, 7654321, 777, a.data), CANOPY_OK);
     CHECK_INT(canopy_instance_inlet_span(backward.instance, 6, 0, -123456, 7654321, 777, b.data), CANOPY_OK);
     CHECK(guarded_bits_equal(&a, &b));
-    CHECK(float_bits(canopy_instance_inlet_at(forward.instance, 6, 0, 99)) == float_bits(canopy_instance_inlet_at(backward.instance, 6, 0, 99)));
+    CHECK(float_bits(host_inlet_at(forward.instance, 6, 0, 99)) == float_bits(host_inlet_at(backward.instance, 6, 0, 99)));
     CHECK_INT(canopy_instance_arena_floats(forward.instance), canopy_instance_arena_floats(backward.instance));
     guarded_free(&a);
     guarded_free(&b);
@@ -674,16 +764,16 @@ static void test_c_node_ids_may_be_any_int64_value(void)
     CHECK_INT(canopy_graph_set_float(rig.graph, 7, "value", 0.5), CANOPY_OK);
     rig_install(&rig);
     CHECK_INT(canopy_engine_node_count(rig.engine), 5);
-    CHECK(canopy_instance_inlet_at(rig.instance, INT64_MAX, 0, 100) == 100.5f);          /* time(100) * gain knob 1.0 + 0.5 */
+    CHECK(host_inlet_at(rig.instance, INT64_MAX, 0, 100) == 100.5f);          /* time(100) * gain knob 1.0 + 0.5 */
     CHECK_INT(canopy_engine_set_knob(rig.engine, -1, 1, 0.5f), CANOPY_OK);
-    CHECK(canopy_instance_inlet_at(rig.instance, INT64_MAX, 0, 100) == 50.5f);
+    CHECK(host_inlet_at(rig.instance, INT64_MAX, 0, 100) == 50.5f);
     CHECK_INT(canopy_instance_inlet_span(rig.instance, INT64_MAX, 0, 0, 30, 3, g.data), CANOPY_OK);
     {
         const float expected[3] = {0.5f, 5.5f, 10.5f};
         CHECK(guarded_equals(&g, expected));
     }
-    CHECK(canopy_instance_inlet_at(rig.instance, INT64_MAX - 1, 0, 100) == 0.0f);        /* the neighbours of the extreme IDs do not exist */
-    CHECK(canopy_instance_inlet_at(rig.instance, INT64_MIN + 1, 0, 100) == 0.0f);
+    CHECK(host_inlet_at(rig.instance, INT64_MAX - 1, 0, 100) == 0.0f);        /* the neighbours of the extreme IDs do not exist */
+    CHECK(host_inlet_at(rig.instance, INT64_MIN + 1, 0, 100) == 0.0f);
     CHECK_INT(canopy_engine_set_knob(rig.engine, INT64_MIN + 1, 0, 0.0f), CANOPY_ERR_NODE);
     guarded_free(&g);
     rig_close(&rig);
@@ -699,7 +789,7 @@ static void test_c_answering_queries_allocates_nothing(void)
     total_before = canopy_alloc_total();
     for (i = 0; i < 50; i++) {
         CHECK_INT(canopy_instance_inlet_span(rig.instance, 6, 0, -5000, 77777 + i, 1000 + 40 * i, g.data), CANOPY_OK);
-        (void)canopy_instance_inlet_at(rig.instance, 6, 0, i);
+        (void)host_inlet_at(rig.instance, 6, 0, i);
         CHECK_INT(canopy_instance_inlet_span(rig.instance, 6, 0, 0, 1, CANOPY_MAX_N, g.data), CANOPY_OK);
         CHECK_INT(canopy_instance_inlet_span(rig.instance, 6, 0, 0, INT64_MIN, 10, g.data), CANOPY_OK);
         CHECK_INT(canopy_instance_inlet_span(rig.instance, 6, 0, 0, 5, 0, g.data), CANOPY_ERR_N);
@@ -714,17 +804,18 @@ static void test_c_answering_queries_allocates_nothing(void)
 static struct {
     CanopyInstance *instance;
     float point;
-    int32_t span_status;
+    int32_t point_status, span_status;
     float span_out[4];
 } reenter;
 
-static float reenter_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t reenter_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx; (void)outlet; (void)t;
-    reenter.point = canopy_instance_inlet_at(reenter.instance, 3, 0, 0);          /* node 3 would answer 9.0 if the instance were free */
+    reenter.point = 9.0f;
+    reenter.point_status = canopy_instance_inlet_at(reenter.instance, 3, 0, 0, &reenter.point);      /* node 3 would answer 9.0 if the instance were free */
     fill_floats(reenter.span_out, 4, 7.0f);
     reenter.span_status = canopy_instance_inlet_span(reenter.instance, 3, 0, 0, 10, 4, reenter.span_out);
-    return 2.0f;
+    { *out = 2.0f; return CANOPY_OK; }
 }
 
 static void test_c_using_an_instance_while_it_is_answering_is_refused_as_busy_and_afterwards_it_works_again(void)
@@ -745,12 +836,13 @@ static void test_c_using_an_instance_while_it_is_answering_is_refused_as_busy_an
     rig_install(&rig);
     reenter.instance = rig.instance;
     reenter.point = -1.0f;
-    reenter.span_status = -1;
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 0) == 2.0f);               /* the outer query is not disturbed */
-    CHECK(reenter.point == 0.0f);                                                 /* the nested point query answered 0.0 */
+    reenter.point_status = reenter.span_status = -1;
+    CHECK(host_inlet_at(rig.instance, 2, 0, 0) == 2.0f);               /* the outer query is not disturbed */
+    CHECK_INT(reenter.point_status, CANOPY_ERR_BUSY);                             /* the nested point query was refused, with a status... */
+    CHECK(reenter.point == 0.0f);                                                 /* ...and a zero */
     CHECK_INT(reenter.span_status, CANOPY_ERR_BUSY);
     CHECK(reenter.span_out[0] == 0.0f && reenter.span_out[3] == 0.0f);            /* and zero-filled */
-    CHECK(canopy_instance_inlet_at(rig.instance, 3, 0, 0) == 9.0f);               /* afterwards the instance answers again */
+    CHECK(host_inlet_at(rig.instance, 3, 0, 0) == 9.0f);               /* afterwards the instance answers again */
     rig_close(&rig);
 }
 
@@ -762,7 +854,9 @@ void register_test_query(void)
     RUN(test_c_point_queries_reach_the_node_and_the_right_outlet);
     RUN(test_c_the_span_of_a_pointwise_node_is_one_point_query_per_sample_time);
     RUN(test_c_a_span_only_node_gets_the_span_and_answers_a_point_query_with_a_one_sample_span);
-    RUN(test_c_a_span_only_node_that_fails_answers_a_point_query_with_zero);
+    RUN(test_c_a_span_only_node_that_fails_reports_its_status_for_a_point_query_and_the_answer_is_zero);
+    RUN(test_c_a_point_query_reports_statuses_like_a_span_query_and_the_answer_is_zero_when_it_fails);
+    RUN(test_c_a_pointwise_node_whose_point_query_fails_fails_the_derived_span_at_the_first_failure_and_it_is_zero_filled);
     RUN(test_c_bad_span_arguments_from_the_host_give_the_documented_status_and_zero_fill_when_n_is_valid);
     RUN(test_c_the_largest_n_works_through_every_kind_of_source);
     RUN(test_c_a_node_gets_the_same_statuses_through_its_context_whether_or_not_the_inlet_is_connected);

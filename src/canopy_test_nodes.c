@@ -89,10 +89,10 @@ static void run_begin(Run *run, CanopyCtx *ctx, FilterState *filter)
 static float step(const Run *run, float y, int64_t i)
 {
     int64_t t = 0;
-    float x, c, a, difference, scaled;
+    float x = 0.0f, c = 0.0f, a, difference, scaled;
     if (canopy_frame_to_ns(i, run->rate, &t) != CANOPY_OK) t = INT64_MAX;
-    x = canopy_inlet_at(run->ctx, 0, t);
-    c = canopy_inlet_at(run->ctx, 1, t);
+    (void)canopy_inlet_at(run->ctx, 0, t, &x);                             /* an input that fails is silence: the status is of no use here */
+    (void)canopy_inlet_at(run->ctx, 1, t, &c);
     a = fminf(fmaxf((c + 1.0f) * 0.5f, 0.0f), 1.0f);
     difference = x - y;
     scaled = a * difference;
@@ -167,14 +167,15 @@ static float value_at(const Run *run, int64_t t)
     return (float)((double)y0 + fraction * ((double)y1 - (double)y0));
 }
 
-static float filter_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t filter_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     FilterState *filter = (FilterState *)canopy_ctx_state(ctx);
     Run run;
     (void)outlet;
-    if (!filter) return 0.0f;
+    if (!filter) return CANOPY_ERR_MEMORY;
     run_begin(&run, ctx, filter);
-    return value_at(&run, t);
+    *out = value_at(&run, t);
+    return CANOPY_OK;
 }
 
 static int32_t filter_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)

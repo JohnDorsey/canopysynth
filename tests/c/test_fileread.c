@@ -85,9 +85,9 @@ static unsigned __stdcall reader_main(void *argument)
         for (i = 1; i < 64; i++)
             if (span[i] != span[0]) InterlockedIncrement(&reader->bad);                   /* one span, one file: never a mixture of two */
         if (span[0] != 0.25f && span[0] != 0.75f) InterlockedIncrement(&reader->bad);      /* and never memory that was freed */
-        if (canopy_instance_read_at(instance, "r", 50000000) != span[0]) {
+        if (host_read_at(instance, "r", 50000000) != span[0]) {
             /* (the file may have been replaced between the two reads) */
-            float again = canopy_instance_read_at(instance, "r", 50000000);
+            float again = host_read_at(instance, "r", 50000000);
             if (again != 0.25f && again != 0.75f) InterlockedIncrement(&reader->bad);
         }
         InterlockedIncrement(&reader->reads);
@@ -157,7 +157,7 @@ static void test_c_running_out_of_memory_while_opening_keeps_the_old_file_says_w
         canopy_alloc_fail_after(fail_at);
         CHECK_INT(canopy_engine_action(rig.engine, 1, "open"), CANOPY_OK);
         canopy_alloc_fail_after(-1);
-        value = canopy_instance_read_at(rig.instance, "l", 10000000);
+        value = host_read_at(rig.instance, "l", 10000000);
         if (value == 0.75f) {
             successes++;
             CHECK_INT(message_length(&rig), 0);
@@ -196,7 +196,7 @@ static void test_c_running_out_of_memory_while_a_graph_with_a_file_is_installed_
             float value;
             installed++;
             CHECK(instance != NULL);
-            value = instance ? canopy_instance_read_at(instance, "l", 10000000) : -1.0f;
+            value = instance ? host_read_at(instance, "l", 10000000) : -1.0f;
             CHECK(value == 0.5f || value == 0.0f);                                         /* the file, or silence if it could not be loaded */
             if (instance) canopy_instance_free(instance);
         } else {
@@ -221,17 +221,17 @@ static void test_c_opening_a_file_changes_the_stamp_downstream_and_a_failed_open
     uint64_t before, after, failed;
     write_constant_wav(path, 0.25f, 50);
     file_rig(&rig, path, 1);
-    (void)canopy_instance_inlet_at(rig.instance, 9, 0, 0);
+    (void)host_inlet_at(rig.instance, 9, 0, 0);
     before = support_stamps[0];
     write_constant_wav(path, 0.75f, 50);
     CHECK_INT(canopy_engine_action(rig.engine, 1, "open"), CANOPY_OK);
-    (void)canopy_instance_inlet_at(rig.instance, 9, 0, 0);
+    (void)host_inlet_at(rig.instance, 9, 0, 0);
     after = support_stamps[0];
     CHECK(before != 0 && after != before);
     DeleteFileA(path);
     CHECK_INT(canopy_engine_action(rig.engine, 1, "open"), CANOPY_OK);                     /* the file is gone: the open fails */
     CHECK(message_length(&rig) > 0);
-    (void)canopy_instance_inlet_at(rig.instance, 9, 0, 0);
+    (void)host_inlet_at(rig.instance, 9, 0, 0);
     failed = support_stamps[0];
     CHECK(failed == after);                                                                /* nothing changed, so nothing downstream is stale */
     rig_close(&rig);
@@ -262,10 +262,10 @@ static void test_c_queries_of_the_file_node_allocate_nothing(void)
     int i;
     write_constant_wav(path, 0.25f, 100);
     file_rig(&rig, path, 0);
-    (void)canopy_instance_read_at(rig.instance, "l", 0);
+    (void)host_read_at(rig.instance, "l", 0);
     before = canopy_alloc_total();
     for (i = 0; i < 50; i++) {
-        (void)canopy_instance_read_at(rig.instance, "l", i * 1000003LL);
+        (void)host_read_at(rig.instance, "l", i * 1000003LL);
         CHECK_INT(canopy_instance_read_span(rig.instance, "r", -5000000, 120000000, 256, span), CANOPY_OK);
     }
     CHECK_INT(canopy_alloc_total(), before);

@@ -4,10 +4,10 @@
 #include "../../src/canopy_internal.h"
 #include "ctest.h"
 
-static float dummy_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t dummy_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx; (void)outlet; (void)t;
-    return 0.0f;
+    { *out = 0.0f; return CANOPY_OK; }
 }
 
 static const CanopyInletDesc INLETS[] = {{"input", "Input", 0.0f}, {"gain", "Gain", 0.5f}};
@@ -155,6 +155,8 @@ static void test_c_a_descriptor_of_another_layout_version_or_too_small_is_refuse
     CanopyNodeType type = make_valid();
     type.abi_version = CANOPY_ABI_VERSION + 1;
     CHECK(canopy_registry_register(registry, &type) == CANOPY_ERR_ABI);
+    type = make_valid(); type.abi_version = 1;                                 /* version 1 had a point query that returned the float: not callable */
+    CHECK(CANOPY_ABI_VERSION == 2 && canopy_registry_register(registry, &type) == CANOPY_ERR_ABI);
     type = make_valid(); type.abi_version = 0;
     CHECK(canopy_registry_register(registry, &type) == CANOPY_ERR_ABI);
     type = make_valid(); type.struct_size = (uint32_t)sizeof type - 1;

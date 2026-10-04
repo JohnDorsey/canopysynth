@@ -40,7 +40,7 @@ class WidgetDesc(ctypes.Structure):
 CTX = ctypes.c_void_p
 CREATE = ctypes.CFUNCTYPE(ctypes.c_void_p, CTX)
 DESTROY = ctypes.CFUNCTYPE(None, CTX, ctypes.c_void_p)
-QUERY_AT = ctypes.CFUNCTYPE(ctypes.c_float, CTX, ctypes.c_int32, ctypes.c_int64)
+QUERY_AT = ctypes.CFUNCTYPE(ctypes.c_int32, CTX, ctypes.c_int32, ctypes.c_int64, ctypes.POINTER(ctypes.c_float))
 QUERY_SPAN = ctypes.CFUNCTYPE(ctypes.c_int32, CTX, ctypes.c_int32, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64,
                               ctypes.POINTER(ctypes.c_float))
 ON_ACTION = ctypes.CFUNCTYPE(None, CTX, ctypes.c_char_p)

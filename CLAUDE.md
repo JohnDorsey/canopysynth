@@ -19,7 +19,7 @@ python run_tests.py --no-asan       # skip the third, AddressSanitizer run of th
 powershell -ExecutionPolicy Bypass -File build.ps1    # only the build
 python dev/mutation/mutate.py dev/mutation/step3.py   # mutation check: breaks the C code in 83 specific ways, one at a time, and requires the
                                                       # suite to notice each (about 15 s each; add a spec file per step; step4.py has 134, step5.py 53, step6.py 64,
-                                                      # step7.py 142, step8.py 141, step9.py 65: step8.py and most of step9.py break Python files, for which
+                                                      # step7.py 142, step8.py 141, step9.py 76: step8.py and most of step9.py break Python files, for which
                                                       # the runner skips the build and the two extra C runs; a run that crashes without a total is "caught")
 python dev/mutation/mutate.py dev/mutation/step4.py N01 P30  # only the mutations whose first word is one of these (here N01 and P30)
                                                       # (a mutation that deadlocks, like the lock ones K01 to K06, is stopped by the runner after
@@ -68,7 +68,7 @@ python dev/listen_check.py --list                     # the audio devices of thi
   `calloc` or `free` directly), so that tests can count live blocks and make the Nth allocation fail; the query path allocates nothing, frees
   nothing and takes no lock (a C test holds the engine's lock itself and checks that queries go through while every other call waits); a span query
   that fails leaves `out` zero-filled (all n floats when n is valid); the knob and boundary slots store the value first and bump the generation
-  second (see `canopy_core.h`). The engine's lock (`CanopyLock`, an SRW lock) is taken exclusively by installing, making and freeing instances and
+  second (see `canopy_core.h`). A query of either kind reports a status and writes its answer (ABI 2): after a failure a point's float is 0.0 and a span is zero-filled; in tests, `host_inlet_at`, `host_read_at` and `inlet_value` give just the answer. The engine's lock (`CanopyLock`, an SRW lock) is taken exclusively by installing, making and freeing instances and
   collecting, and shared by the host calls that only use the lists (knob and boundary writes, actions, counts), except the buttons of a node with
   `CANOPY_FLAG_SERVICE` (the realtime preview), which take it exclusively because they make and free the node's own instance; an instance applies
   the packages prepared for it at the start of a query by swapping pointers, and the editing thread frees what it has finished with

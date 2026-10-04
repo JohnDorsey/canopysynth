@@ -131,7 +131,7 @@ static void test_c_a_service_node_makes_an_instance_in_its_action_that_is_counte
     CHECK_INT(canopy_engine_set_graph(rig.engine, second), CANOPY_OK);
     if (svc_instance) {
         CHECK_INT(canopy_instance_graph_serial(svc_instance), canopy_engine_graph_serial(rig.engine) - 1);    /* not yet: it adopts at its next query */
-        (void)canopy_instance_inlet_at(svc_instance, 9, 0, 0);
+        (void)host_inlet_at(svc_instance, 9, 0, 0);
         CHECK_INT(canopy_instance_graph_serial(svc_instance), canopy_engine_graph_serial(rig.engine));
     }
     CHECK_INT(canopy_engine_action(rig.engine, 1, "drop"), CANOPY_OK);
@@ -170,7 +170,7 @@ static void test_c_freeing_the_engine_stops_service_nodes_first_while_every_grap
     third = service_graph(1, 2);
     CHECK_INT(canopy_engine_set_graph(rig.engine, second), CANOPY_OK);              /* ...and never queries, so it stays there while two more are installed */
     CHECK_INT(canopy_engine_set_graph(rig.engine, third), CANOPY_OK);
-    (void)canopy_instance_inlet_at(rig.instance, 9, 0, 0);                           /* the host's instance has moved on */
+    (void)host_inlet_at(rig.instance, 9, 0, 0);                           /* the host's instance has moved on */
     CHECK_INT(canopy_engine_collect(rig.engine), 3);                                 /* all three graphs are held, for the service instance's sake */
     canopy_instance_free(rig.instance);
     rig.instance = NULL;
@@ -192,11 +192,11 @@ static void test_c_a_service_instance_is_freed_with_its_node_once_every_graph_th
     CHECK_INT(canopy_engine_action(rig.engine, 1, "make"), CANOPY_OK);
     without = service_graph(0, 0);
     CHECK_INT(canopy_engine_set_graph(rig.engine, without), CANOPY_OK);             /* the node is deleted */
-    (void)canopy_instance_inlet_at(rig.instance, 9, 0, 0);
+    (void)host_inlet_at(rig.instance, 9, 0, 0);
     CHECK_INT(canopy_engine_collect(rig.engine), 2);                                 /* the first graph is held: the service instance still runs it */
     CHECK_INT(svc_destroyed, 0);
     CHECK_INT(canopy_engine_service_count(rig.engine), 1);
-    if (svc_instance) (void)canopy_instance_inlet_at(svc_instance, 9, 0, 0);        /* its thread has moved on */
+    if (svc_instance) (void)host_inlet_at(svc_instance, 9, 0, 0);        /* its thread has moved on */
     CHECK_INT(canopy_engine_collect(rig.engine), 1);
     CHECK_INT(svc_destroyed, 1);                                                     /* the node's resource went, and the instance with it */
     CHECK_INT(canopy_engine_service_count(rig.engine), 0);
@@ -227,7 +227,7 @@ static void test_c_installing_prepares_a_service_instance_like_a_hosts_and_runni
         CHECK_INT(status, CANOPY_ERR_MEMORY);
         CHECK_INT(canopy_engine_graph_serial(rig.engine), serial_before);            /* the old graph is still the installed one */
         if (svc_instance) {
-            (void)canopy_instance_inlet_at(svc_instance, 9, 0, 0);
+            (void)host_inlet_at(svc_instance, 9, 0, 0);
             CHECK(canopy_instance_graph_serial(svc_instance) <= serial_before);      /* nothing was prepared for the service instance that it could adopt */
         }
         CHECK_INT(canopy_engine_service_count(rig.engine), 1);
@@ -235,7 +235,7 @@ static void test_c_installing_prepares_a_service_instance_like_a_hosts_and_runni
     CHECK(failures > 0);
     CHECK(k < 400);
     if (svc_instance) {
-        (void)canopy_instance_inlet_at(svc_instance, 9, 0, 0);
+        (void)host_inlet_at(svc_instance, 9, 0, 0);
         CHECK_INT(canopy_instance_graph_serial(svc_instance), canopy_engine_graph_serial(rig.engine));    /* the install that worked reached it */
     }
     canopy_graph_free(second);

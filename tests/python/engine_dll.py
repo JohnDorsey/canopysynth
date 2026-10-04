@@ -55,7 +55,7 @@ engine_graph_serial = declare("canopy_engine_graph_serial", i64, vp)
 instance_graph_serial = declare("canopy_instance_graph_serial", i64, vp)
 instance_free = declare("canopy_instance_free", None, vp)
 instance_arena_floats = declare("canopy_instance_arena_floats", i64, vp)
-instance_inlet_at = declare("canopy_instance_inlet_at", f32, vp, i64, i32, i64)
+_instance_inlet_at = declare("canopy_instance_inlet_at", i32, vp, i64, i32, i64, ctypes.POINTER(f32))
 instance_inlet_span = declare("canopy_instance_inlet_span", i32, vp, i64, i32, i64, i64, i64, p_float)
 
 BOUNDARY_INLET, BOUNDARY_OUTLET = 0, 1
@@ -65,7 +65,7 @@ engine_boundary_count = declare("canopy_engine_boundary_count", i32, vp)
 engine_boundary_at = declare("canopy_engine_boundary_at", i32, vp, i32, ctypes.c_char_p, i32, ctypes.POINTER(i32), ctypes.POINTER(i32),
                              ctypes.POINTER(i64))
 engine_node_message = declare("canopy_engine_node_message", i32, vp, i64, ctypes.c_char_p, i32, ctypes.POINTER(i32))
-instance_read_at = declare("canopy_instance_read_at", f32, vp, cstr, i64)
+_instance_read_at = declare("canopy_instance_read_at", i32, vp, cstr, i64, ctypes.POINTER(f32))
 instance_read_span = declare("canopy_instance_read_span", i32, vp, cstr, i64, i64, i64, p_float)
 
 AUDIO_SYSTEM, AUDIO_NULL = 0, 1
@@ -75,7 +75,39 @@ preview_state = declare("canopy_preview_state", i32, vp, i64, ctypes.POINTER(i32
 preview_set_time = declare("canopy_preview_set_time", i32, vp, i64, i64)
 preview_warning = declare("canopy_preview_warning", i32, vp, i64, ctypes.c_char_p, i32, ctypes.POINTER(i32))
 
-ctx_inlet_at = declare("canopy_inlet_at", f32, vp, i32, i64)
+_ctx_inlet_at = declare("canopy_inlet_at", i32, vp, i32, i64, ctypes.POINTER(f32))
+
+
+# Point queries return a status and write their answer (ABI 2). Most tests only want the answer, so these give it (0.0 when the call fails);
+# the `_status` versions return (status, answer).
+def instance_inlet_at_status(instance, node_id, inlet, t):
+    value = ctypes.c_float(9.0)
+    status = _instance_inlet_at(instance, node_id, inlet, t, ctypes.byref(value))
+    return status, value.value
+
+
+def instance_read_at_status(instance, name, t):
+    value = ctypes.c_float(9.0)
+    status = _instance_read_at(instance, name, t, ctypes.byref(value))
+    return status, value.value
+
+
+def ctx_inlet_at_status(ctx, inlet, t):
+    value = ctypes.c_float(9.0)
+    status = _ctx_inlet_at(ctx, inlet, t, ctypes.byref(value))
+    return status, value.value
+
+
+def instance_inlet_at(instance, node_id, inlet, t):
+    return instance_inlet_at_status(instance, node_id, inlet, t)[1]
+
+
+def instance_read_at(instance, name, t):
+    return instance_read_at_status(instance, name, t)[1]
+
+
+def ctx_inlet_at(ctx, inlet, t):
+    return ctx_inlet_at_status(ctx, inlet, t)[1]
 ctx_inlet_span = declare("canopy_inlet_span", i32, vp, i32, i64, i64, i64, p_float)
 ctx_scratch = declare("canopy_scratch", p_float, vp, i64)
 ctx_state = declare("canopy_ctx_state", vp, vp)
@@ -100,6 +132,21 @@ def guarded(function, default):
         except BaseException as error:        # noqa: BLE001
             ERRORS.append(repr(error))
             return default
+    return wrapper
+
+
+def guarded_point(function):
+    """A point handler for the DLL from a Python function `function(ctx, outlet, t)` that returns the answer (a float: status 0) or a tuple
+    `(status, answer)`. An exception is recorded in ERRORS and the status is ERR_ARGUMENT."""
+    def wrapper(ctx, outlet, t, out):
+        try:
+            result = function(ctx, outlet, t)
+        except BaseException as error:        # noqa: BLE001
+            ERRORS.append(repr(error))
+            return ERR_ARGUMENT
+        status, value = result if isinstance(result, tuple) else (OK, result)
+        out[0] = value
+        return status
     return wrapper
 
 
@@ -138,7 +185,7 @@ class PyNodeType:
         t.n_settings, t.settings = len(settings), ctypes.cast(setting_array, ctypes.POINTER(d.SettingDesc))
         t.scratch_buffers = scratch
         if at:
-            self.at = d.QUERY_AT(guarded(at, 0.0))
+            self.at = d.QUERY_AT(guarded_point(at))
             t.handlers.query_at = self.at
         if span:
             self.span = d.QUERY_SPAN(guarded(span, ERR_ARGUMENT))
@@ -195,5 +242,3 @@ class Rig:
 
 def span_buffer(n):
     return (ctypes.c_float * n)()
-
-instance_read_at_status = declare("canopy_instance_read_at_status", i32, vp, cstr, i64, ctypes.POINTER(f32))

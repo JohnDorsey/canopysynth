@@ -53,9 +53,9 @@ static void test_c_a_boundary_inlet_starts_at_zero_and_gives_what_the_host_wrote
     static const int64_t times[] = {0, -5, 123456789012345LL, INT64_MAX, INT64_MIN};
     int i;
     pair(&rig, "intensity", "song");
-    CHECK(canopy_instance_read_at(rig.instance, "song", 77) == 0.0f);
+    CHECK(host_read_at(rig.instance, "song", 77) == 0.0f);
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "intensity", 0.7f), CANOPY_OK);
-    for (i = 0; i < 5; i++) CHECK(canopy_instance_read_at(rig.instance, "song", times[i]) == 0.7f);
+    for (i = 0; i < 5; i++) CHECK(host_read_at(rig.instance, "song", times[i]) == 0.7f);
     CHECK_INT(canopy_instance_read_span(rig.instance, "song", 0, 1000000, 100, g.data), CANOPY_OK);
     for (i = 0; i < 100; i++) CHECK(g.data[i] == 0.7f);
     guarded_reset(&g);
@@ -66,28 +66,44 @@ static void test_c_a_boundary_inlet_starts_at_zero_and_gives_what_the_host_wrote
     rig_close(&rig);
 }
 
-static void test_c_a_point_read_with_a_status_tells_an_unknown_name_from_an_answer_of_zero(void)
+static void test_c_a_point_read_has_a_status_that_tells_an_unknown_name_from_an_answer_of_zero(void)
 {
     Rig rig;
     float value = 5.0f;
     pair(&rig, "intensity", "song");
-    CHECK_INT(canopy_instance_read_at_status(rig.instance, "song", 77, &value), CANOPY_OK);               /* a real 0.0 */
+    CHECK_INT(canopy_instance_read_at(rig.instance, "song", 77, &value), CANOPY_OK);               /* a real 0.0 */
     CHECK(value == 0.0f);
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "intensity", -0.375f), CANOPY_OK);
-    CHECK_INT(canopy_instance_read_at_status(rig.instance, "song", INT64_MIN, &value), CANOPY_OK);
-    CHECK(value == -0.375f && value == canopy_instance_read_at(rig.instance, "song", INT64_MIN));
+    CHECK_INT(canopy_instance_read_at(rig.instance, "song", INT64_MIN, &value), CANOPY_OK);
+    CHECK(value == -0.375f && value == host_read_at(rig.instance, "song", INT64_MIN));
     value = 5.0f;
-    CHECK_INT(canopy_instance_read_at_status(rig.instance, "nope", 0, &value), CANOPY_ERR_NODE);
+    CHECK_INT(canopy_instance_read_at(rig.instance, "nope", 0, &value), CANOPY_ERR_NODE);
     CHECK(value == 0.0f);                                                                                 /* the output is zero on every failure */
     value = 5.0f;
-    CHECK_INT(canopy_instance_read_at_status(rig.instance, "intensity", 0, &value), CANOPY_ERR_NODE);    /* a boundary inlet is not readable */
+    CHECK_INT(canopy_instance_read_at(rig.instance, "intensity", 0, &value), CANOPY_ERR_NODE);    /* a boundary inlet is not readable */
     CHECK(value == 0.0f);
     value = 5.0f;
-    CHECK_INT(canopy_instance_read_at_status(rig.instance, NULL, 0, &value), CANOPY_ERR_ARGUMENT);
+    CHECK_INT(canopy_instance_read_at(rig.instance, NULL, 0, &value), CANOPY_ERR_ARGUMENT);
     CHECK(value == 0.0f);
-    CHECK_INT(canopy_instance_read_at_status(NULL, "song", 0, &value), CANOPY_ERR_ARGUMENT);
-    CHECK_INT(canopy_instance_read_at_status(rig.instance, "song", 0, NULL), CANOPY_ERR_ARGUMENT);
-    CHECK(canopy_instance_read_at(rig.instance, "nope", 0) == 0.0f);                                      /* the plain call is as it was */
+    CHECK_INT(canopy_instance_read_at(NULL, "song", 0, &value), CANOPY_ERR_ARGUMENT);
+    CHECK_INT(canopy_instance_read_at(rig.instance, "song", 0, NULL), CANOPY_ERR_ARGUMENT);
+    rig_close(&rig);
+}
+
+static void test_c_a_point_read_of_a_node_that_fails_reports_the_nodes_status_and_a_zero(void)
+{
+    Rig rig;
+    float value = 5.0f;
+    rig_open(&rig);
+    rig_node(&rig, 1, "test.failing");
+    rig_node(&rig, 2, "boundary_outlet");
+    rig_connect(&rig, 1, "out", 2, "in");
+    set_name(rig.graph, 2, "bad");
+    rig_install(&rig);
+    CHECK_INT(canopy_instance_read_at(rig.instance, "bad", 0, &value), FAILING_STATUS);       /* the node wrote 5.0 and failed */
+    CHECK(value == 0.0f);
+    CHECK_INT(canopy_instance_read_at(rig.instance, "bad", 0, &value), FAILING_STATUS);       /* every time: nothing was left in a bad state */
+    CHECK(host_read_at(rig.instance, "bad", 0) == 0.0f);
     rig_close(&rig);
 }
 
@@ -100,12 +116,12 @@ static void test_c_a_boundary_inlet_accepts_any_float_and_clamps_nothing(void)
     pair(&rig, "x", "y");
     for (i = 0; i < 8; i++) {
         CHECK_INT(canopy_engine_set_boundary(rig.engine, "x", values[i]), CANOPY_OK);
-        CHECK(float_bits(canopy_instance_read_at(rig.instance, "y", 0)) == float_bits(values[i]));
+        CHECK(float_bits(host_read_at(rig.instance, "y", 0)) == float_bits(values[i]));
         CHECK_INT(canopy_instance_read_span(rig.instance, "y", 0, 40, 4, span), CANOPY_OK);
         CHECK(float_bits(span[0]) == float_bits(values[i]) && float_bits(span[3]) == float_bits(values[i]));
     }
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "x", NAN), CANOPY_OK);
-    CHECK(isnan(canopy_instance_read_at(rig.instance, "y", 0)));
+    CHECK(isnan(host_read_at(rig.instance, "y", 0)));
     rig_close(&rig);
 }
 
@@ -125,11 +141,11 @@ static void test_c_a_boundary_inlet_feeds_the_graph_and_a_boundary_outlet_reads_
     CHECK_INT(canopy_graph_set_knob(rig.graph, 2, "gain", 0.5f), CANOPY_OK);
     rig_install(&rig);
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "level", 0.5f), CANOPY_OK);
-    CHECK(canopy_instance_read_at(rig.instance, "scaled", 999) == 0.25f);
+    CHECK(host_read_at(rig.instance, "scaled", 999) == 0.25f);
     CHECK_INT(canopy_instance_read_span(rig.instance, "scaled", 0, 80, 8, span), CANOPY_OK);
     for (i = 0; i < 8; i++) CHECK(span[i] == 0.25f);
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "level", 40.0f), CANOPY_OK);          /* beyond -1..1 on the way through the graph too */
-    CHECK(canopy_instance_read_at(rig.instance, "scaled", 0) == 20.0f);
+    CHECK(host_read_at(rig.instance, "scaled", 0) == 20.0f);
     rig_close(&rig);
 }
 
@@ -142,9 +158,9 @@ static void test_c_an_unconnected_boundary_outlet_gives_its_knob(void)
     rig_node(&rig, 2, "boundary_outlet");
     set_name(rig.graph, 2, "free");
     rig_install(&rig);
-    CHECK(canopy_instance_read_at(rig.instance, "free", 5) == 0.0f);                       /* the inlet's default knob position */
+    CHECK(host_read_at(rig.instance, "free", 5) == 0.0f);                       /* the inlet's default knob position */
     CHECK_INT(canopy_engine_set_knob(rig.engine, 2, 0, 0.25f), CANOPY_OK);
-    CHECK(canopy_instance_read_at(rig.instance, "free", -5) == 0.25f);
+    CHECK(host_read_at(rig.instance, "free", -5) == 0.25f);
     CHECK_INT(canopy_instance_read_span(rig.instance, "free", 0, 8, 8, span), CANOPY_OK);
     for (i = 0; i < 8; i++) CHECK(span[i] == 0.25f);
     rig_close(&rig);
@@ -164,12 +180,12 @@ static void test_c_unknown_names_and_the_wrong_kind_are_refused_with_the_documen
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "in_name", 0.5f), CANOPY_OK);
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "in", 1.0f), CANOPY_ERR_NODE);         /* a start of a name is not the name... */
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "in_name_and_more", 1.0f), CANOPY_ERR_NODE);   /* ...nor is a name with more after it */
-    CHECK(canopy_instance_read_at(rig.instance, "out", 0) == 0.0f && canopy_instance_read_at(rig.instance, "out_name_x", 0) == 0.0f);
-    CHECK(canopy_instance_read_at(rig.instance, "out_name", 0) == 0.5f);
-    CHECK(canopy_instance_read_at(rig.instance, "nope", 0) == 0.0f);
-    CHECK(canopy_instance_read_at(rig.instance, "in_name", 0) == 0.0f);                    /* a boundary inlet cannot be read, whatever it holds */
-    CHECK(canopy_instance_read_at(rig.instance, NULL, 0) == 0.0f);
-    CHECK(canopy_instance_read_at(NULL, "out_name", 0) == 0.0f);
+    CHECK(host_read_at(rig.instance, "out", 0) == 0.0f && host_read_at(rig.instance, "out_name_x", 0) == 0.0f);
+    CHECK(host_read_at(rig.instance, "out_name", 0) == 0.5f);
+    CHECK(host_read_at(rig.instance, "nope", 0) == 0.0f);
+    CHECK(host_read_at(rig.instance, "in_name", 0) == 0.0f);                    /* a boundary inlet cannot be read, whatever it holds */
+    CHECK(host_read_at(rig.instance, NULL, 0) == 0.0f);
+    CHECK(host_read_at(NULL, "out_name", 0) == 0.0f);
     CHECK_INT(canopy_instance_read_span(rig.instance, "nope", 0, 16, 16, g.data), CANOPY_ERR_NODE);
     CHECK(guarded_all_zero(&g));
     guarded_reset(&g);
@@ -229,7 +245,7 @@ static void test_c_an_empty_or_repeated_boundary_name_is_a_compile_fault_and_the
         CHECK(strstr(canopy_engine_last_error(rig.engine), "boundary") != NULL);
         CHECK(strstr(canopy_engine_last_error(rig.engine), needles[i]) != NULL);
         if (strstr(canopy_engine_last_error(rig.engine), needles[i]) == NULL) printf("    case %d: the message is: %s\n", i, canopy_engine_last_error(rig.engine));
-        CHECK(canopy_instance_read_at(rig.instance, "kept", 0) == 0.5f);                  /* the installed graph keeps working */
+        CHECK(host_read_at(rig.instance, "kept", 0) == 0.5f);                  /* the installed graph keeps working */
         CHECK_INT(canopy_engine_boundary_count(rig.engine), 2);
         canopy_graph_free(bad);
     }
@@ -329,15 +345,15 @@ static void test_c_a_boundary_value_belongs_to_the_node_so_it_survives_renaming_
     set_name(without, 2, "out");
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "a", 0.7f), CANOPY_OK);
     CHECK_INT(canopy_engine_set_graph(rig.engine, renamed), CANOPY_OK);
-    CHECK(canopy_instance_read_at(rig.instance, "out", 0) == 0.7f);                         /* the node is the same node: its value stays */
+    CHECK(host_read_at(rig.instance, "out", 0) == 0.7f);                         /* the node is the same node: its value stays */
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "a", 1.0f), CANOPY_ERR_NODE);          /* but the old name is gone */
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "b", 0.9f), CANOPY_OK);
-    CHECK(canopy_instance_read_at(rig.instance, "out", 0) == 0.9f);
+    CHECK(host_read_at(rig.instance, "out", 0) == 0.9f);
     CHECK_INT(canopy_engine_set_graph(rig.engine, without), CANOPY_OK);                     /* the node leaves... */
-    CHECK(canopy_instance_read_at(rig.instance, "out", 0) == 0.0f);                         /* (the outlet's inlet is a knob now) */
+    CHECK(host_read_at(rig.instance, "out", 0) == 0.0f);                         /* (the outlet's inlet is a knob now) */
     CHECK_INT(canopy_engine_collect(rig.engine), 1);
     CHECK_INT(canopy_engine_set_graph(rig.engine, rig.graph), CANOPY_OK);                   /* ...and comes back as a new node: 0.0 */
-    CHECK(canopy_instance_read_at(rig.instance, "out", 0) == 0.0f);
+    CHECK(host_read_at(rig.instance, "out", 0) == 0.0f);
     canopy_graph_free(renamed);
     canopy_graph_free(without);
     rig_close(&rig);
@@ -362,7 +378,7 @@ static void test_c_two_boundary_inlets_keep_values_of_their_own_and_an_instance_
     rig_install(&rig);
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "one", 0.1f), CANOPY_OK);
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "two", 0.2f), CANOPY_OK);
-    CHECK(canopy_instance_read_at(rig.instance, "three", 0) == 0.1f && canopy_instance_read_at(rig.instance, "four", 0) == 0.2f);
+    CHECK(host_read_at(rig.instance, "three", 0) == 0.1f && host_read_at(rig.instance, "four", 0) == 0.2f);
     /* the second graph swaps the wiring and names a new outlet; the instance has not been asked since the install */
     CHECK_INT(canopy_graph_add_node(second, 1, "boundary_inlet"), CANOPY_OK);
     CHECK_INT(canopy_graph_add_node(second, 2, "boundary_inlet"), CANOPY_OK);
@@ -375,9 +391,9 @@ static void test_c_two_boundary_inlets_keep_values_of_their_own_and_an_instance_
     set_name(second, 3, "three");
     set_name(second, 5, "five");
     CHECK_INT(canopy_engine_set_graph(rig.engine, second), CANOPY_OK);
-    CHECK(canopy_instance_read_at(rig.instance, "five", 0) == 0.1f);                        /* a name that only the new graph has */
-    CHECK(canopy_instance_read_at(rig.instance, "three", 0) == 0.2f);
-    CHECK(canopy_instance_read_at(rig.instance, "four", 0) == 0.0f);                        /* and one that it dropped */
+    CHECK(host_read_at(rig.instance, "five", 0) == 0.1f);                        /* a name that only the new graph has */
+    CHECK(host_read_at(rig.instance, "three", 0) == 0.2f);
+    CHECK(host_read_at(rig.instance, "four", 0) == 0.0f);                        /* and one that it dropped */
     canopy_graph_free(second);
     rig_close(&rig);
 }
@@ -417,13 +433,13 @@ static void test_c_every_write_by_name_changes_the_stamp_of_what_is_downstream(v
     rig_connect(&rig, 2, "out", 9, "in0");
     set_name(rig.graph, 1, "x");
     rig_install(&rig);
-    (void)canopy_instance_inlet_at(rig.instance, 9, 0, 0);
+    (void)host_inlet_at(rig.instance, 9, 0, 0);
     first = support_stamps[0];
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "x", 0.5f), CANOPY_OK);
-    (void)canopy_instance_inlet_at(rig.instance, 9, 0, 0);
+    (void)host_inlet_at(rig.instance, 9, 0, 0);
     second = support_stamps[0];
     CHECK_INT(canopy_engine_set_boundary(rig.engine, "x", 0.5f), CANOPY_OK);                  /* the same value again is still a write */
-    (void)canopy_instance_inlet_at(rig.instance, 9, 0, 0);
+    (void)host_inlet_at(rig.instance, 9, 0, 0);
     third = support_stamps[0];
     CHECK(first != 0 && second != first && third != second && third != first);
     rig_close(&rig);
@@ -448,7 +464,7 @@ static unsigned __stdcall watcher_main(void *argument)
         return 0;
     }
     while (!*watcher->stop) {
-        float now = canopy_instance_read_at(instance, "out", 0);
+        float now = host_read_at(instance, "out", 0);
         if (now < last) InterlockedIncrement(&watcher->bad);                               /* the writer only counts up: a value read never goes back */
         last = now;
         if (canopy_instance_read_span(instance, "out", 0, 160, 16, span) != CANOPY_OK) InterlockedIncrement(&watcher->bad);
@@ -502,7 +518,7 @@ static void test_c_a_host_write_is_seen_whole_by_readers_in_other_threads_and_ne
         CloseHandle(handles[w]);
     }
     CHECK_INT(bad, 0);
-    CHECK(canopy_instance_read_at(rig.instance, "out", 0) == (float)WRITES);                /* a read that starts after the last write sees it */
+    CHECK(host_read_at(rig.instance, "out", 0) == (float)WRITES);                /* a read that starts after the last write sees it */
     rig_close(&rig);
 }
 
@@ -518,7 +534,9 @@ void register_test_boundary(void)
     RUN(test_c_boundary_names_are_any_non_empty_text_compared_byte_for_byte);
     RUN(test_c_the_boundary_nodes_are_listed_sorted_by_name_with_kind_and_node_id);
     RUN(test_c_a_boundary_value_belongs_to_the_node_so_it_survives_renaming_and_is_lost_with_the_node);
-    RUN(test_c_a_point_read_with_a_status_tells_an_unknown_name_from_an_answer_of_zero);
+    RUN(test_c_a_point_read_has_a_status_that_tells_an_unknown_name_from_an_answer_of_zero);
+
+    RUN(test_c_a_point_read_of_a_node_that_fails_reports_the_nodes_status_and_a_zero);
     RUN(test_c_two_boundary_inlets_keep_values_of_their_own_and_an_instance_adopts_a_new_graph_before_looking_the_name_up);
     RUN(test_c_a_span_read_is_the_first_query_after_an_install_and_still_sees_the_new_graph);
     RUN(test_c_every_write_by_name_changes_the_stamp_of_what_is_downstream);

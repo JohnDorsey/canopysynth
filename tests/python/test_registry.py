@@ -58,7 +58,7 @@ class Made:
         t.n_settings, t.settings = 3, ctypes.cast(settings, ctypes.POINTER(d.SettingDesc))
         t.n_widgets, t.widgets = 2, ctypes.cast(widgets, ctypes.POINTER(d.WidgetDesc))
         t.scratch_buffers = 3
-        self.at = d.QUERY_AT(lambda ctx, outlet, time: 0.0)
+        self.at = d.QUERY_AT(lambda ctx, outlet, time, out: 0)
         t.handlers.query_at = self.at
 
     def register(self, registry):

@@ -33,10 +33,10 @@ BOUNDARY_AT = (SHARED_LOCK + "    graph = atomic_load_explicit(&engine->current,
 
 MUTATIONS = [
     # ---- the two node types ----
-    ("B01 inlet gives 0 whatever the host wrote (point)", B, "    (void)outlet; (void)t;\n    return canopy_ctx_boundary_value(ctx);", "    (void)outlet; (void)t; (void)ctx;\n    return 0.0f;"),
+    ("B01 inlet gives 0 whatever the host wrote (point)", B, '    (void)outlet; (void)t;\n    *out = canopy_ctx_boundary_value(ctx);\n    return CANOPY_OK;', '    (void)outlet; (void)t; (void)ctx;\n    *out = 0.0f;\n    return CANOPY_OK;'),
     ("B02 inlet span leaves the last sample", B, "    for (i = 0; i < n; i++) out[i] = value;", "    for (i = 0; i < n - 1; i++) out[i] = value;"),
     ("B03 inlet span writes one past out", B, "    for (i = 0; i < n; i++) out[i] = value;", "    for (i = 0; i <= n; i++) out[i] = value;"),
-    ("B04 inlet value clamped", B, "    return canopy_ctx_boundary_value(ctx);", "    return canopy_ctx_boundary_value(ctx) > 1.0f ? 1.0f : canopy_ctx_boundary_value(ctx);"),
+    ("B04 inlet value clamped", B, '    *out = canopy_ctx_boundary_value(ctx);\n    return CANOPY_OK;', '    *out = canopy_ctx_boundary_value(ctx) > 1.0f ? 1.0f : canopy_ctx_boundary_value(ctx);\n    return CANOPY_OK;'),
     ("B05 inlet has no boundary slot flag", B, "CANOPY_FLAG_REALTIME_SAFE | CANOPY_FLAG_BOUNDARY_NODE | CANOPY_FLAG_BOUNDARY_SLOT;", "CANOPY_FLAG_REALTIME_SAFE | CANOPY_FLAG_BOUNDARY_NODE;"),
     ("B06 inlet is not marked as a boundary node", B, "CANOPY_FLAG_REALTIME_SAFE | CANOPY_FLAG_BOUNDARY_NODE | CANOPY_FLAG_BOUNDARY_SLOT;", "CANOPY_FLAG_REALTIME_SAFE | CANOPY_FLAG_BOUNDARY_SLOT;"),
     ("B07 outlet is not marked as a boundary node", B, "    type.flags = CANOPY_FLAG_REALTIME_SAFE | CANOPY_FLAG_BOUNDARY_NODE;\n", "    type.flags = CANOPY_FLAG_REALTIME_SAFE;\n"),
@@ -88,12 +88,12 @@ MUTATIONS = [
     ("C34 listing takes no lock", C, *without(BOUNDARY_AT, SHARED_LOCK, SHARED_UNLOCK)),
     # ---- the instance's reads ----
     ("I20 a boundary inlet can be read", I, "    return entry && entry->kind == CANOPY_BOUNDARY_OUTLET ? entry->node : -1;", "    return entry ? entry->node : -1;"),
-    ("I21 point read does not adopt", I, "    if (!acquire(instance)) return CANOPY_ERR_BUSY;\n    canopy_instance_adopt(instance);\n    index = outlet_by_name(instance, name);\n    if (index >= 0) *value", "    if (!acquire(instance)) return CANOPY_ERR_BUSY;\n    index = outlet_by_name(instance, name);\n    if (index >= 0) *value"),
+    ("I21 point read does not adopt", I, '    if (!acquire(instance)) return CANOPY_ERR_BUSY;\n    canopy_instance_adopt(instance);\n    index = outlet_by_name(instance, name);\n    if (index >= 0) status = inlet_at', '    if (!acquire(instance)) return CANOPY_ERR_BUSY;\n    index = outlet_by_name(instance, name);\n    if (index >= 0) status = inlet_at'),
     ("I22 span read does not adopt", I, "    canopy_instance_adopt(instance);\n    index = outlet_by_name(instance, name);\n    if (index < 0) {", "    index = outlet_by_name(instance, name);\n    if (index < 0) {"),
     ("I23 unknown name does not zero-fill a span", I, "    if (index < 0) {\n        zero_fill(out, n);\n        status = CANOPY_ERR_NODE;", "    if (index < 0) {\n        status = CANOPY_ERR_NODE;"),
     ("I24 span read busy flag never released", I, "        status = inlet_span(instance, index, 0, t0, t1, n, out);\n    }\n    release(instance);\n    return status;\n}\n\nint32_t canopy_instance_inlet_span",
      "        status = inlet_span(instance, index, 0, t0, t1, n, out);\n    }\n    return status;\n}\n\nint32_t canopy_instance_inlet_span"),
-    ("I25 reads the outlet's second inlet slot", I, "    if (index >= 0) *value = inlet_at(instance, index, 0, t);", "    if (index >= 0) *value = inlet_at(instance, index, 1, t);"),
+    ("I25 reads the outlet's second inlet slot", I, '    if (index >= 0) status = inlet_at(instance, index, 0, t, out);', '    if (index >= 0) status = inlet_at(instance, index, 1, t, out);'),
     ("I26 span read of a NULL name is not refused", I, "    if (!instance || !name) {\n        zero_fill(out, n);\n        return CANOPY_ERR_ARGUMENT;\n    }\n    if (!acquire(instance)) {\n        zero_fill(out, n);\n        return CANOPY_ERR_BUSY;\n    }\n    canopy_instance_adopt(instance);\n    index = outlet_by_name",
      "    if (!instance) {\n        zero_fill(out, n);\n        return CANOPY_ERR_ARGUMENT;\n    }\n    if (!acquire(instance)) {\n        zero_fill(out, n);\n        return CANOPY_ERR_BUSY;\n    }\n    canopy_instance_adopt(instance);\n    index = outlet_by_name"),
 ]

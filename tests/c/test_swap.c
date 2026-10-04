@@ -9,7 +9,7 @@
 
 static float read_inlet(CanopyInstance *instance, int64_t sink, int32_t inlet)
 {
-    return canopy_instance_inlet_at(instance, sink, inlet, 0);
+    return host_inlet_at(instance, sink, inlet, 0);
 }
 
 static void test_c_an_instance_adopts_a_newly_installed_graph_at_its_next_query_and_not_before(void)
@@ -406,18 +406,18 @@ static int adoption_scenario(CanopyRegistry *registry, CanopyGraph *a, CanopyGra
     busy = canopy_engine_new_instance(engine);
     idle = canopy_engine_new_instance(engine);
     if (!busy || !idle) goto done;
-    if (canopy_instance_inlet_at(busy, 9, 0, 0) != 0.5f) (*serial_problems)++;
+    if (host_inlet_at(busy, 9, 0, 0) != 0.5f) (*serial_problems)++;
     if (canopy_engine_set_graph(engine, b) != CANOPY_OK) {
         /* a failed install changes nothing: the old graph is still the installed one and both instances still answer from it */
         if (canopy_engine_graph_serial(engine) != 1) (*serial_problems)++;
         if (strstr(canopy_engine_last_error(engine), "out of memory") == NULL) (*serial_problems)++;          /* and says why */
-        if (canopy_instance_inlet_at(busy, 9, 0, 0) != 0.5f || canopy_instance_inlet_at(idle, 9, 0, 0) != 0.5f) (*serial_problems)++;
+        if (host_inlet_at(busy, 9, 0, 0) != 0.5f || host_inlet_at(idle, 9, 0, 0) != 0.5f) (*serial_problems)++;
         goto done;
     }
-    if (canopy_instance_inlet_at(busy, 9, 0, 0) != 0.75f) (*serial_problems)++;       /* adopts b */
+    if (host_inlet_at(busy, 9, 0, 0) != 0.75f) (*serial_problems)++;       /* adopts b */
     if (canopy_engine_set_graph(engine, a) != CANOPY_OK) goto done;                  /* the idle one has two unadopted installs now */
     (void)canopy_engine_collect(engine);
-    if (canopy_instance_inlet_at(idle, 9, 0, 0) != 0.5f) (*serial_problems)++;       /* it adopts both steps at once, ending on a */
+    if (host_inlet_at(idle, 9, 0, 0) != 0.5f) (*serial_problems)++;       /* it adopts both steps at once, ending on a */
     ok = 1;
 done:
     if (busy) canopy_instance_free(busy);
@@ -502,7 +502,7 @@ static unsigned __stdcall reader_main(void *argument)
                 break;
             }
         if (out[0] != 0.5f && out[0] != 0.25f) InterlockedIncrement(&reader->bad);          /* the value of one graph or of the other, never a mixture */
-        (void)canopy_instance_inlet_at(instance, 9, 1, 0);                                  /* a state node in one graph, a knob in the other */
+        (void)host_inlet_at(instance, 9, 1, 0);                                  /* a state node in one graph, a knob in the other */
         InterlockedIncrement(&reader->blocks);
     }
     canopy_instance_free(instance);
@@ -636,7 +636,7 @@ static unsigned __stdcall probe_main(void *argument)
     case PROBE_NEW_INSTANCE: probe->made = canopy_engine_new_instance(probe->engine); probe->status = probe->made ? CANOPY_OK : -1; break;
     case PROBE_FREE_INSTANCE: canopy_instance_free(probe->to_free); probe->status = CANOPY_OK; break;
     case PROBE_ENGINE_FREE: probe->status = canopy_engine_free(probe->engine); break;          /* instances are left: it says BUSY, once it gets in */
-    case PROBE_QUERY_POINT: probe->status = canopy_instance_inlet_at(probe->instance, 9, 0, 0) == 0.5f ? CANOPY_OK : -1; break;
+    case PROBE_QUERY_POINT: probe->status = host_inlet_at(probe->instance, 9, 0, 0) == 0.5f ? CANOPY_OK : -1; break;
     case PROBE_QUERY_SPAN: probe->status = canopy_instance_inlet_span(probe->instance, 9, 0, 0, 40, 4, out); break;
     default: probe->status = -1; break;
     }
@@ -788,10 +788,10 @@ static void test_c_many_nodes_added_in_any_order_keep_their_own_resources_across
     shuffle(order, N, 1);
     add_source_and_sink_pairs(rig.graph, order, N);
     rig_install(&rig);                                  /* (more than the 16 records an array starts with: it grows three times) */
-    for (i = 0; i < N; i++) CHECK(canopy_instance_inlet_at(rig.instance, 1000 + old_ids[i], 0, 0) == 1.0f);
+    for (i = 0; i < N; i++) CHECK(host_inlet_at(rig.instance, 1000 + old_ids[i], 0, 0) == 1.0f);
     for (i = 0; i < N; i++)
         for (b = 0; b < i % 3 + 1; b++) CHECK_INT(canopy_engine_action(rig.engine, old_ids[i], "bump"), CANOPY_OK);
-    for (i = 0; i < N; i++) CHECK(canopy_instance_inlet_at(rig.instance, 1000 + old_ids[i], 0, 0) == (float)(2 + i % 3));
+    for (i = 0; i < N; i++) CHECK(host_inlet_at(rig.instance, 1000 + old_ids[i], 0, 0) == (float)(2 + i % 3));
     CHECK_INT(support_shared_created, N);
     /* all of them again, in another order, and as many new ones in between */
     memcpy(order, old_ids, sizeof order);
@@ -801,8 +801,8 @@ static void test_c_many_nodes_added_in_any_order_keep_their_own_resources_across
     shuffle(order, N, 3);
     add_source_and_sink_pairs(second, order, N);
     CHECK_INT(canopy_engine_set_graph(rig.engine, second), CANOPY_OK);
-    for (i = 0; i < N; i++) CHECK(canopy_instance_inlet_at(rig.instance, 1000 + old_ids[i], 0, 0) == (float)(2 + i % 3));   /* what was bumped stays */
-    for (i = 0; i < N; i++) CHECK(canopy_instance_inlet_at(rig.instance, 1000 + new_ids[i], 0, 0) == 1.0f);
+    for (i = 0; i < N; i++) CHECK(host_inlet_at(rig.instance, 1000 + old_ids[i], 0, 0) == (float)(2 + i % 3));   /* what was bumped stays */
+    for (i = 0; i < N; i++) CHECK(host_inlet_at(rig.instance, 1000 + new_ids[i], 0, 0) == 1.0f);
     CHECK_INT(support_shared_created, 2 * N);                                                                              /* and nothing was made twice */
     /* half of the old ones leave: their resources go once nothing can use them, the others keep theirs */
     add_source_and_sink_pairs(third, odd_old, N / 2);
@@ -810,8 +810,8 @@ static void test_c_many_nodes_added_in_any_order_keep_their_own_resources_across
     shuffle(order, N, 4);
     add_source_and_sink_pairs(third, order, N);
     CHECK_INT(canopy_engine_set_graph(rig.engine, third), CANOPY_OK);
-    for (i = 1; i < N; i += 2) CHECK(canopy_instance_inlet_at(rig.instance, 1000 + old_ids[i], 0, 0) == (float)(2 + i % 3));
-    for (i = 0; i < N; i++) CHECK(canopy_instance_inlet_at(rig.instance, 1000 + new_ids[i], 0, 0) == 1.0f);
+    for (i = 1; i < N; i += 2) CHECK(host_inlet_at(rig.instance, 1000 + old_ids[i], 0, 0) == (float)(2 + i % 3));
+    for (i = 0; i < N; i++) CHECK(host_inlet_at(rig.instance, 1000 + new_ids[i], 0, 0) == 1.0f);
     CHECK_INT(canopy_engine_collect(rig.engine), 1);
     CHECK_INT(support_shared_created, 2 * N);
     CHECK_INT(support_shared_destroyed, N / 2);

@@ -328,14 +328,14 @@ static void test_c_the_preview_asks_the_graph_for_exactly_the_frames_it_is_about
 static CanopyEngine *seek_engine;
 static int seek_done;
 
-static float seeker_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t seeker_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx; (void)outlet; (void)t;
     if (!seek_done) {
         seek_done = 1;
         CHECK_INT(canopy_preview_set_time(seek_engine, PREVIEW, 5000000000LL), CANOPY_OK);      /* the user types a new time while the callback runs */
     }
-    return 0.25f;
+    { *out = 0.25f; return CANOPY_OK; }
 }
 
 static void test_c_a_seek_during_a_callback_wins_over_the_advance(void)
@@ -492,7 +492,7 @@ static void test_c_a_deleted_preview_plays_silence_and_stands_still_and_comes_ba
     /* deleted and collected: the node's resource goes (the position with it), and a node of that ID added later starts afresh */
     CHECK_INT(canopy_engine_set_graph(rig.engine, without), CANOPY_OK);
     CHECK_INT(canopy_preview_fill(rig.engine, PREVIEW, out.data, FRAMES), CANOPY_OK);  /* the audio thread moves on to the graph without the node... */
-    (void)canopy_instance_inlet_at(rig.instance, 1, 0, 0);                            /* ...and so does the host's instance: no graph that has the node is in use */
+    (void)host_inlet_at(rig.instance, 1, 0, 0);                            /* ...and so does the host's instance: no graph that has the node is in use */
     (void)canopy_engine_collect(rig.engine);
     CHECK_INT(canopy_engine_service_count(rig.engine), 0);
     CHECK_INT(canopy_preview_fill(rig.engine, PREVIEW, out.data, FRAMES), CANOPY_ERR_NODE);
@@ -917,7 +917,7 @@ static void test_c_deleting_the_preview_node_closes_its_device_once_the_audio_th
     calls = counter_of(rig.engine, PREVIEW);
     CHECK(calls && wait_for_callbacks(calls, 3));
     CHECK_INT(canopy_engine_set_graph(rig.engine, without), CANOPY_OK);
-    (void)canopy_instance_inlet_at(rig.instance, 1, 0, 0);                             /* the host's instance moves on at once... */
+    (void)host_inlet_at(rig.instance, 1, 0, 0);                             /* the host's instance moves on at once... */
     CHECK_INT(canopy_engine_service_count(rig.engine), 1);                             /* ...the preview's own does when its next callback comes */
     deadline = GetTickCount64() + 5000;
     while (canopy_engine_service_count(rig.engine) != 0 && GetTickCount64() < deadline) {
@@ -947,7 +947,7 @@ static void test_c_freeing_the_engine_closes_a_playing_preview_and_one_whose_dev
     while (playing_of(rig.engine, PREVIEW) != 0 && GetTickCount64() < deadline) Sleep(1);
     CHECK_INT(canopy_engine_set_graph(rig.engine, second), CANOPY_OK);
     CHECK_INT(canopy_engine_set_graph(rig.engine, third), CANOPY_OK);
-    (void)canopy_instance_inlet_at(rig.instance, 1, 0, 0);
+    (void)host_inlet_at(rig.instance, 1, 0, 0);
     CHECK(canopy_engine_collect(rig.engine) >= 3);                                     /* the old graphs are held for the preview's instance */
     canopy_graph_free(second);
     canopy_graph_free(third);

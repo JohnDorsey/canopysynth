@@ -8,10 +8,10 @@ static const CanopyInletDesc IN_AB[] = {{"a", "A", 0.0f}, {"b", "B", 0.0f}};
 static const CanopyInletDesc IN_ONE[] = {{"in", "In", 0.0f}};
 static const CanopyOutletDesc OUT_ONE[] = {{"out", "Out"}};
 
-static float zero_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t zero_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)ctx; (void)outlet; (void)t;
-    return 0.0f;
+    { *out = 0.0f; return CANOPY_OK; }
 }
 
 static void add_budget_type(CanopyRegistry *registry, const char *key, int32_t budget)
@@ -119,7 +119,7 @@ static void test_c_a_graph_whose_nodes_declare_no_buffers_has_no_arena_and_still
     rig_connect(&rig, 2, "out", 3, "in0");
     rig_install(&rig);
     CHECK_INT(canopy_instance_arena_floats(rig.instance), 0);
-    CHECK(canopy_instance_inlet_at(rig.instance, 3, 0, 0) == 0.0f);
+    CHECK(host_inlet_at(rig.instance, 3, 0, 0) == 0.0f);
     rig_close(&rig);
 }
 
@@ -214,11 +214,11 @@ static void taker_run(CanopyCtx *ctx)
                 if (taker.got[i][k] != (float)(i + 1)) taker.intact = 0;
 }
 
-static float taker_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t taker_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     (void)outlet; (void)t;
     taker_run(ctx);
-    return 1.0f;
+    { *out = 1.0f; return CANOPY_OK; }
 }
 
 static int32_t taker_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)
@@ -352,7 +352,7 @@ static void test_c_buffers_are_released_when_the_handler_returns(void)
     CHECK(first != NULL);
     take(&rig);
     CHECK(taker.got[0] == first);                                     /* the same buffer again: the arena was emptied on return */
-    CHECK(canopy_instance_inlet_at(rig.instance, 2, 0, 0) == 1.0f);   /* also after a point query (a different handler) */
+    CHECK(host_inlet_at(rig.instance, 2, 0, 0) == 1.0f);   /* also after a point query (a different handler) */
     CHECK(taker.got[0] == first);
     take(&rig);
     CHECK(taker.got[0] == first && taker.calls == 4);
@@ -475,7 +475,7 @@ static void test_c_a_node_that_asks_for_more_than_it_declared_cannot_starve_the_
 static float *point_seen[64];
 static int point_calls;
 
-static float point_taker_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t point_taker_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     float *p = canopy_scratch(ctx, 8);
     (void)outlet; (void)t;
@@ -485,7 +485,7 @@ static float point_taker_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
         int k;
         for (k = 0; k < 8; k++) p[k] = 1.0f;
     }
-    return p ? 1.0f : -1.0f;
+    { *out = p ? 1.0f : -1.0f; return CANOPY_OK; }
 }
 
 static void test_c_a_pointwise_nodes_derived_span_gets_its_buffer_afresh_for_every_sample(void)
@@ -518,7 +518,7 @@ static struct {
     int takes, nulls;
 } loop;
 
-static float loopy_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t loopy_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     int32_t wanted;
     int32_t i;
@@ -527,11 +527,11 @@ static float loopy_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
     for (i = 0; i < wanted; i++) {
         if (!canopy_scratch(ctx, CANOPY_MAX_N)) {
             loop.nulls++;
-            return 0.0f;
+            { *out = 0.0f; return CANOPY_OK; }
         }
         loop.takes++;
     }
-    return 1.0f + canopy_inlet_at(ctx, 0, t - 1);
+    { *out = 1.0f + inlet_value(ctx, 0, t - 1); return CANOPY_OK; }
 }
 
 static void test_c_a_loop_that_keeps_taking_buffers_meets_null_when_the_arena_is_used_up(void)
@@ -557,7 +557,7 @@ static void test_c_a_loop_that_keeps_taking_buffers_meets_null_when_the_arena_is
     CHECK_INT(arena_buffers(&rig), 3);                                  /* 1 + 2: the sum over the nodes, as there is a loop */
     memset(&loop, 0, sizeof loop);
     /* sink asks node 1 (takes 1), which asks node 2 (takes 2), which asks node 1 again: no buffer left, so it stops there */
-    CHECK(canopy_instance_inlet_at(rig.instance, 3, 0, 0) == 2.0f);
+    CHECK(host_inlet_at(rig.instance, 3, 0, 0) == 2.0f);
     CHECK_INT(loop.takes, 3);
     CHECK_INT(loop.nulls, 1);
     CHECK_HEAP();

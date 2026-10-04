@@ -211,7 +211,7 @@ MUTATIONS = [
      "        *y1 = k + 1 < 0 ? run->initial : y_at(run, 1);"),
     ("F15 no interpolation between samples", F, "    return (float)((double)y0 + fraction * ((double)y1 - (double)y0));",
      "    return (float)((double)y0 + 0.0 * fraction * ((double)y1 - (double)y0));"),
-    ("F16 coefficient read from the signal inlet", F, "    c = canopy_inlet_at(run->ctx, 1, t);", "    c = canopy_inlet_at(run->ctx, 0, t);"),
+    ("F16 coefficient read from the signal inlet", F, '    (void)canopy_inlet_at(run->ctx, 1, t, &c);', '    (void)canopy_inlet_at(run->ctx, 0, t, &c);'),
     ("F17 initial value ignored", F, "    run->initial = (float)canopy_ctx_float(ctx, SETTING_INITIAL);", "    run->initial = 0.0f;"),
     ("F18 checkpoints lost when their array grows", F,
      "canopy_realloc(filter->checkpoints, (size_t)filter->cap_checkpoints * sizeof(float), (size_t)capacity * sizeof(float));",
@@ -287,7 +287,5 @@ MUTATIONS = [
     ("E56 set_graph takes no lock", E, *without(SET_GRAPH, EXCLUSIVE_LOCK, EXCLUSIVE_UNLOCK)),
     ("E57 collect takes no lock", E, *without(COLLECT, EXCLUSIVE_LOCK, EXCLUSIVE_UNLOCK)),
     ("P30 instance_free takes no lock", P, *without(INSTANCE_FREE, EXCLUSIVE_LOCK, EXCLUSIVE_UNLOCK)),
-    ("K06 a query takes the lock", I, "    if (!instance || !acquire(instance)) return 0.0f;\n    canopy_instance_adopt(instance);",
-     "    if (!instance || !acquire(instance)) return 0.0f;\n    canopy_lock_shared(&instance->engine->lock);\n    canopy_instance_adopt(instance);\n"
-     "    canopy_unlock_shared(&instance->engine->lock);"),
+    ("K06 a query takes the lock", I, '    if (!acquire(instance)) return CANOPY_ERR_BUSY;\n    canopy_instance_adopt(instance);                                          /* a newly installed graph is taken up here, by swapping pointers */', '    if (!acquire(instance)) return CANOPY_ERR_BUSY;\n    canopy_lock_shared(&instance->engine->lock);\n    canopy_instance_adopt(instance);\n    canopy_unlock_shared(&instance->engine->lock);'),
 ]

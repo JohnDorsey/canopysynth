@@ -228,11 +228,12 @@ static float sample_at(const FileData *data, int right, int64_t t)
     return (float)(a + fraction * (b - a));
 }
 
-static float file_at(CanopyCtx *ctx, int32_t outlet, int64_t t)
+static int32_t file_at(CanopyCtx *ctx, int32_t outlet, int64_t t, float *out)
 {
     FileShared *shared = (FileShared *)canopy_ctx_shared(ctx);
     FileData *data = shared ? atomic_load(&shared->data) : NULL;
-    return data ? sample_at(data, outlet == 1, t) : 0.0f;
+    *out = data ? sample_at(data, outlet == 1, t) : 0.0f;
+    return CANOPY_OK;
 }
 
 static int32_t file_span(CanopyCtx *ctx, int32_t outlet, int64_t t0, int64_t t1, int64_t n, float *out)

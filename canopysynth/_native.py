@@ -37,7 +37,7 @@ _SIGNATURES = [
     ("canopy_engine_boundary_at", _i32, [_vp, _i32, ctypes.c_char_p, _i32, _p_i32, _p_i32, _p_i64]),
     ("canopy_engine_new_instance", _vp, [_vp]),
     ("canopy_instance_free", None, [_vp]),
-    ("canopy_instance_read_at_status", _i32, [_vp, _str, _i64, _p_float]),
+    ("canopy_instance_read_at", _i32, [_vp, _str, _i64, _p_float]),
     ("canopy_instance_read_span", _i32, [_vp, _str, _i64, _i64, _i64, _p_float]),
 ]
 

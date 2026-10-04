@@ -186,19 +186,15 @@ CANOPY_API int64_t canopy_instance_graph_serial(const CanopyInstance *instance);
 
 /* The host reads from a graph through an inlet (this is what a BoundaryOutletNode does): the same two kinds of query as canopy_inlet_at and
    canopy_inlet_span, with the same statuses and the same knob fallback, plus CANOPY_ERR_NODE for an unknown node ID and CANOPY_ERR_BUSY
-   when the instance is in use. A point query that cannot be answered returns 0.0f. */
-CANOPY_API float canopy_instance_inlet_at(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t);
+   when the instance is in use. The point query writes its answer to *out and returns a status, like the span query; on every failure *out is 0.0f. */
+CANOPY_API int32_t canopy_instance_inlet_at(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t, float *out);
 CANOPY_API int32_t canopy_instance_inlet_span(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t0, int64_t t1, int64_t n,
                                               float *out);
 
 /* The same two queries through the boundary outlet called `name` (in the graph the instance runs; a newly installed graph is adopted first):
    statuses as above, with CANOPY_ERR_NODE when there is no boundary outlet of that name (a boundary inlet of that name does not count) and
-   CANOPY_ERR_ARGUMENT for a NULL `name`; a point query that cannot be answered returns 0.0f. */
-CANOPY_API float canopy_instance_read_at(CanopyInstance *instance, const char *name, int64_t t);
-/* The same point query with a status, for a host that must tell "no such boundary outlet" from an answer of 0.0: *value gets the answer, and 0.0
-   on every failure. CANOPY_OK; CANOPY_ERR_NODE (no boundary outlet of that name); CANOPY_ERR_BUSY (the instance is in use);
-   CANOPY_ERR_ARGUMENT (a NULL instance, name or value). A node's own failure is still not reported (design section 5: it answers 0.0). */
-CANOPY_API int32_t canopy_instance_read_at_status(CanopyInstance *instance, const char *name, int64_t t, float *value);
+   CANOPY_ERR_ARGUMENT for a NULL `name` or `out`. */
+CANOPY_API int32_t canopy_instance_read_at(CanopyInstance *instance, const char *name, int64_t t, float *out);
 CANOPY_API int32_t canopy_instance_read_span(CanopyInstance *instance, const char *name, int64_t t0, int64_t t1, int64_t n, float *out);
 
 /* ---- diagnostics: memory the library has allocated and not yet freed, and blocks ever allocated (to check for leaks) ---- */

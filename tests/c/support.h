@@ -50,7 +50,7 @@ void support_calls_reset(void);
    test.sum           inlets a and b; out = a + b. Pointwise.
    test.shift         inlet in; out(t) = in(t + shift), the setting `shift` (INT, ns): looks ahead. Both handlers.
    test.sink          inlets in0 (knob 0) and in1 (knob 0.5), no outlets: the host reads through its inlets.
-   test.failing       inlet in; out: query_at returns 5.0, query_span writes 123 into out and returns status 77.
+   test.failing       inlet in; out: query_at writes 5.0 into *out and returns status 77, query_span writes 123 into out and returns status 77.
    test.failing_span_only  outlet out: query_span only, as test.failing. */
 #define FAILING_STATUS 77
 /* More (plan step 4: generation numbers, state, adoption of a new graph):
@@ -85,6 +85,13 @@ CanopyRegistry *support_registry(void);                           /* a new regis
 void support_add_type(CanopyRegistry *registry, const CanopyNodeType *type);       /* registers one more (checked) */
 void support_add_builtin(CanopyRegistry *registry, const CanopyNodeType *type);    /* the same, as a built-in type (flat key, boundary flag allowed) */
 CanopyNodeType support_base_type(const char *key, const char *name);                /* a descriptor to fill in: ABI fields set, no ports */
+
+/* ---- point queries as plain floats ----
+   Since ABI 2 a point query returns a status and writes its answer. Most tests only care about the answer, so these keep the older meaning: the
+   answer, and 0.0 when the call fails (the status is ignored). Tests of the statuses call the C functions themselves. */
+float host_inlet_at(CanopyInstance *instance, int64_t node_id, int32_t inlet, int64_t t);      /* canopy_instance_inlet_at */
+float host_read_at(CanopyInstance *instance, const char *name, int64_t t);                     /* canopy_instance_read_at */
+float inlet_value(CanopyCtx *ctx, int32_t inlet, int64_t t);                                   /* canopy_inlet_at, for node handlers */
 
 /* ---- the rig ---- */
 typedef struct {
