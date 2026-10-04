@@ -1,0 +1,25 @@
+{
+  "format": "canopysynth-graph",
+  "version": 1,
+  "loop_protection": true,
+  "nodes": [
+    {"id": 1, "type": "file_read", "type_version": 1, "x": 40, "y": 60.5,
+     "settings": {"path": "C:/audio/does_not_exist_anymore.wav"}, "knobs": {}},
+    {"id": 2, "type": "boundary_outlet", "type_version": 1, "x": 320, "y": 40,
+     "settings": {"name": "song_left"}, "knobs": {"in": 0.0}},
+    {"id": 3, "type": "boundary_outlet", "type_version": 1, "x": 320, "y": 120,
+     "settings": {"name": "song_right"}, "knobs": {"in": 0.0}},
+    {"id": 4, "type": "boundary_inlet", "type_version": 1, "x": 40, "y": 220,
+     "settings": {"name": "intensity"}, "knobs": {}},
+    {"id": 5, "type": "realtime_preview", "type_version": 1, "x": 320, "y": 240,
+     "settings": {"device": "Speakers (Test Device)"}, "knobs": {"left": 0.5, "right": -0.25, "center": 0.0}},
+    {"id": 7, "type": "boundary_outlet", "type_version": 1, "x": 560, "y": 40,
+     "settings": {"name": "copy_of_left"}, "knobs": {"in": 1.0}}
+  ],
+  "connections": [
+    {"from": [1, "left"], "to": [2, "in"]},
+    {"from": [1, "right"], "to": [3, "in"]},
+    {"from": [4, "out"], "to": [5, "center"]},
+    {"from": [1, "left"], "to": [7, "in"]}
+  ]
+}

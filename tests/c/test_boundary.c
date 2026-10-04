@@ -66,6 +66,31 @@ static void test_c_a_boundary_inlet_starts_at_zero_and_gives_what_the_host_wrote
     rig_close(&rig);
 }
 
+static void test_c_a_point_read_with_a_status_tells_an_unknown_name_from_an_answer_of_zero(void)
+{
+    Rig rig;
+    float value = 5.0f;
+    pair(&rig, "intensity", "song");
+    CHECK_INT(canopy_instance_read_at_status(rig.instance, "song", 77, &value), CANOPY_OK);               /* a real 0.0 */
+    CHECK(value == 0.0f);
+    CHECK_INT(canopy_engine_set_boundary(rig.engine, "intensity", -0.375f), CANOPY_OK);
+    CHECK_INT(canopy_instance_read_at_status(rig.instance, "song", INT64_MIN, &value), CANOPY_OK);
+    CHECK(value == -0.375f && value == canopy_instance_read_at(rig.instance, "song", INT64_MIN));
+    value = 5.0f;
+    CHECK_INT(canopy_instance_read_at_status(rig.instance, "nope", 0, &value), CANOPY_ERR_NODE);
+    CHECK(value == 0.0f);                                                                                 /* the output is zero on every failure */
+    value = 5.0f;
+    CHECK_INT(canopy_instance_read_at_status(rig.instance, "intensity", 0, &value), CANOPY_ERR_NODE);    /* a boundary inlet is not readable */
+    CHECK(value == 0.0f);
+    value = 5.0f;
+    CHECK_INT(canopy_instance_read_at_status(rig.instance, NULL, 0, &value), CANOPY_ERR_ARGUMENT);
+    CHECK(value == 0.0f);
+    CHECK_INT(canopy_instance_read_at_status(NULL, "song", 0, &value), CANOPY_ERR_ARGUMENT);
+    CHECK_INT(canopy_instance_read_at_status(rig.instance, "song", 0, NULL), CANOPY_ERR_ARGUMENT);
+    CHECK(canopy_instance_read_at(rig.instance, "nope", 0) == 0.0f);                                      /* the plain call is as it was */
+    rig_close(&rig);
+}
+
 static void test_c_a_boundary_inlet_accepts_any_float_and_clamps_nothing(void)
 {
     Rig rig;
@@ -493,6 +518,7 @@ void register_test_boundary(void)
     RUN(test_c_boundary_names_are_any_non_empty_text_compared_byte_for_byte);
     RUN(test_c_the_boundary_nodes_are_listed_sorted_by_name_with_kind_and_node_id);
     RUN(test_c_a_boundary_value_belongs_to_the_node_so_it_survives_renaming_and_is_lost_with_the_node);
+    RUN(test_c_a_point_read_with_a_status_tells_an_unknown_name_from_an_answer_of_zero);
     RUN(test_c_two_boundary_inlets_keep_values_of_their_own_and_an_instance_adopts_a_new_graph_before_looking_the_name_up);
     RUN(test_c_a_span_read_is_the_first_query_after_an_install_and_still_sees_the_new_graph);
     RUN(test_c_every_write_by_name_changes_the_stamp_of_what_is_downstream);

@@ -260,15 +260,24 @@ static int32_t outlet_by_name(const CanopyInstance *instance, const char *name)
     return entry && entry->kind == CANOPY_BOUNDARY_OUTLET ? entry->node : -1;
 }
 
+int32_t canopy_instance_read_at_status(CanopyInstance *instance, const char *name, int64_t t, float *value)
+{
+    int32_t index, status = CANOPY_OK;
+    if (value) *value = 0.0f;
+    if (!instance || !name || !value) return CANOPY_ERR_ARGUMENT;
+    if (!acquire(instance)) return CANOPY_ERR_BUSY;
+    canopy_instance_adopt(instance);
+    index = outlet_by_name(instance, name);
+    if (index >= 0) *value = inlet_at(instance, index, 0, t);
+    else status = CANOPY_ERR_NODE;
+    release(instance);
+    return status;
+}
+
 float canopy_instance_read_at(CanopyInstance *instance, const char *name, int64_t t)
 {
     float value = 0.0f;
-    int32_t index;
-    if (!instance || !name || !acquire(instance)) return 0.0f;
-    canopy_instance_adopt(instance);
-    index = outlet_by_name(instance, name);
-    if (index >= 0) value = inlet_at(instance, index, 0, t);
-    release(instance);
+    canopy_instance_read_at_status(instance, name, t, &value);
     return value;
 }
 

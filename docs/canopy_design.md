@@ -273,15 +273,17 @@ frame, frac = canopysynth.ns_to_frame_fraction(t_ns, 44100)
 d = graph.to_dict()                                # the host stores this in its own project file
 ```
 
-Exceptions: `QueryError` (a query returned a nonzero status) and `GraphError` (a graph cannot be compiled or loaded, or a boundary name does not
-exist).
+Exceptions: `QueryError` (a query returned a nonzero status), `GraphError` (a graph cannot be compiled or loaded) and `BoundaryError` (a problem with
+a boundary node or its name: a name that does not exist, or a boundary node whose name is empty or repeated). The two are separate classes
+(changed at step 9, at the author's request: the design had put boundary names under `GraphError`).
 
 ## 16. Errors
 
 - A missing or unreadable WAV when pressing "open": the node keeps its old file (or silence if none) and shows the message on the node.
-- Asking the engine for a boundary name that does not exist raises `GraphError`, naming the boundary.
-- A graph that cannot be compiled (an unknown node type, duplicate boundary names built through the Python API) raises `GraphError` with the
-  reason; the editor shows it and keeps the previous compiled graph running.
+- Asking the engine for a boundary name that does not exist raises `BoundaryError`, naming the boundary.
+- A graph that cannot be compiled (an unknown node type, a bad setting or connection) raises `GraphError` with the reason, and one whose boundary
+  nodes have an empty or repeated name (possible when built through the Python API) raises `BoundaryError`; the editor shows either and keeps the
+  previous compiled graph running.
 - A C span query reports errors with its int status (section 5); a point query returns 0.0.
 
 ## 17. Not in version 1

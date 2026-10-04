@@ -206,7 +206,8 @@ def test_py_files_that_cannot_be_used_leave_the_node_silent_with_a_message_and_a
                 out[i] = 5.0
             assert e.instance_read_span(rig.instance, b"r", 0, 8_000_000, 8, out) == e.OK and all(v == 0.0 for v in out)    # a span is silent too
             rig.close()
-        for path, text in ((os.path.join(directory, "missing.wav"), "file not found"), (directory, "not a file"), ("relative/path.wav", "absolute")):
+        for path, text in ((os.path.join(directory, "missing.wav"), "file not found"), (directory, "not a file"), ("relative/path.wav", "absolute"),
+                           ("C:relative.wav", "absolute"), ("\\rooted.wav", "absolute"), ("/rooted.wav", "absolute")):     # (drive-relative and rooted are relative too)
             rig = file_rig(path)
             assert text in message(rig), (path, message(rig))
             rig.close()

@@ -19,7 +19,8 @@ python run_tests.py --no-asan       # skip the third, AddressSanitizer run of th
 powershell -ExecutionPolicy Bypass -File build.ps1    # only the build
 python dev/mutation/mutate.py dev/mutation/step3.py   # mutation check: breaks the C code in 83 specific ways, one at a time, and requires the
                                                       # suite to notice each (about 15 s each; add a spec file per step; step4.py has 134, step5.py 53, step6.py 64,
-                                                      # step7.py 142)
+                                                      # step7.py 142, step8.py 141, step9.py 65: step8.py and most of step9.py break Python files, for which
+                                                      # the runner skips the build and the two extra C runs; a run that crashes without a total is "caught")
 python dev/mutation/mutate.py dev/mutation/step4.py N01 P30  # only the mutations whose first word is one of these (here N01 and P30)
                                                       # (a mutation that deadlocks, like the lock ones K01 to K06, is stopped by the runner after
                                                       # CANOPY_TEST_TIMEOUT seconds, default 180: set it to 30 for such a run)
@@ -42,10 +43,17 @@ python dev/listen_check.py --list                     # the audio devices of thi
     playback devices; `canopy_audio.h`), `canopy_preview.c` (the realtime preview node and its exported calls), `canopy_version.c`.
   - `third_party/` vendored single headers, kept byte for byte as downloaded (LF line endings; provenance and hashes in its README): dr_wav.h and
     miniaudio.h are in. Each download needs the author's permission.
-  - `canopysynth/` the Python package (the built `canopysynth.dll` is written into it).
+  - `canopysynth/` the Python package (the built `canopysynth.dll` is written into it): `helpers.py` (the public helper functions), `_lib.py`
+    (loads and version-checks the DLL), `_descriptor.py` (ctypes mirror of the node-type descriptor), `errors.py` (`GraphError`, `BoundaryError`, `QueryError`), `catalog.py` (the
+    node types a graph may name, read from a registry, and the migrations by type version), `_values.py` (checks of settings, knobs, positions),
+    `graph.py` (the graph model: `Graph`, `Node`, `Port`, `to_dict` / `from_dict`), `_native.py` (the DLL with every function's types declared and
+    the status codes), `engine.py` (the bridge: `Engine`, `Instance`; `QueryError` is in `errors.py`). Importing the package does not load the DLL;
+    the first `Graph()` or `Engine()` does.
   - `tests/c/` plain C: `ctest.h` (`CHECK`, `CHECK_INT`, `CHECK_HEAP`, `RUN`), `support.c/.h` (guarded output buffers, the `test.*` node types, the `Rig`
     that builds a graph, engine and instance and checks for leaks on `rig_close`), one `test_<area>.c` per area registered in `run_c_tests.c`.
-  - `tests/python/` plain `test_*` functions; `engine_dll.py` has the ctypes bindings and a way to write node types in Python (tests only).
+  - `tests/python/` plain `test_*` functions; `engine_dll.py` has the ctypes bindings and a way to write node types in Python (tests only);
+    `graph_dll.py` builds a catalog of Python, built-in and hidden test types and converts a `Graph` into the C description to compile it in a real
+    engine; `fixtures/graph_v1.json` is the hand-written version 1 file the saved format is pinned by (a format change must keep it loading).
   - `dev/mutation/` the mutation check; `docs/`; `build/` (generated).
 - Test names are unique: C tests start with `test_c_`, Python tests with `test_py_`.
 - Delivery counter: `CANOPYSYNTH_BUILD`, bumped by exactly 1 once per finished prompt that changed code. It lives in `src/canopy.h` and

@@ -195,6 +195,10 @@ CANOPY_API int32_t canopy_instance_inlet_span(CanopyInstance *instance, int64_t 
    statuses as above, with CANOPY_ERR_NODE when there is no boundary outlet of that name (a boundary inlet of that name does not count) and
    CANOPY_ERR_ARGUMENT for a NULL `name`; a point query that cannot be answered returns 0.0f. */
 CANOPY_API float canopy_instance_read_at(CanopyInstance *instance, const char *name, int64_t t);
+/* The same point query with a status, for a host that must tell "no such boundary outlet" from an answer of 0.0: *value gets the answer, and 0.0
+   on every failure. CANOPY_OK; CANOPY_ERR_NODE (no boundary outlet of that name); CANOPY_ERR_BUSY (the instance is in use);
+   CANOPY_ERR_ARGUMENT (a NULL instance, name or value). A node's own failure is still not reported (design section 5: it answers 0.0). */
+CANOPY_API int32_t canopy_instance_read_at_status(CanopyInstance *instance, const char *name, int64_t t, float *value);
 CANOPY_API int32_t canopy_instance_read_span(CanopyInstance *instance, const char *name, int64_t t0, int64_t t1, int64_t n, float *out);
 
 /* ---- diagnostics: memory the library has allocated and not yet freed, and blocks ever allocated (to check for leaks) ---- */

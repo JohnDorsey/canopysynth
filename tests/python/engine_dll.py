@@ -195,3 +195,5 @@ class Rig:
 
 def span_buffer(n):
     return (ctypes.c_float * n)()
+
+instance_read_at_status = declare("canopy_instance_read_at_status", i32, vp, cstr, i64, ctypes.POINTER(f32))

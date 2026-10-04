@@ -88,12 +88,12 @@ MUTATIONS = [
     ("C34 listing takes no lock", C, *without(BOUNDARY_AT, SHARED_LOCK, SHARED_UNLOCK)),
     # ---- the instance's reads ----
     ("I20 a boundary inlet can be read", I, "    return entry && entry->kind == CANOPY_BOUNDARY_OUTLET ? entry->node : -1;", "    return entry ? entry->node : -1;"),
-    ("I21 point read does not adopt", I, "    if (!instance || !name || !acquire(instance)) return 0.0f;\n    canopy_instance_adopt(instance);\n", "    if (!instance || !name || !acquire(instance)) return 0.0f;\n"),
+    ("I21 point read does not adopt", I, "    if (!acquire(instance)) return CANOPY_ERR_BUSY;\n    canopy_instance_adopt(instance);\n    index = outlet_by_name(instance, name);\n    if (index >= 0) *value", "    if (!acquire(instance)) return CANOPY_ERR_BUSY;\n    index = outlet_by_name(instance, name);\n    if (index >= 0) *value"),
     ("I22 span read does not adopt", I, "    canopy_instance_adopt(instance);\n    index = outlet_by_name(instance, name);\n    if (index < 0) {", "    index = outlet_by_name(instance, name);\n    if (index < 0) {"),
     ("I23 unknown name does not zero-fill a span", I, "    if (index < 0) {\n        zero_fill(out, n);\n        status = CANOPY_ERR_NODE;", "    if (index < 0) {\n        status = CANOPY_ERR_NODE;"),
     ("I24 span read busy flag never released", I, "        status = inlet_span(instance, index, 0, t0, t1, n, out);\n    }\n    release(instance);\n    return status;\n}\n\nint32_t canopy_instance_inlet_span",
      "        status = inlet_span(instance, index, 0, t0, t1, n, out);\n    }\n    return status;\n}\n\nint32_t canopy_instance_inlet_span"),
-    ("I25 reads the outlet's second inlet slot", I, "    if (index >= 0) value = inlet_at(instance, index, 0, t);", "    if (index >= 0) value = inlet_at(instance, index, 1, t);"),
+    ("I25 reads the outlet's second inlet slot", I, "    if (index >= 0) *value = inlet_at(instance, index, 0, t);", "    if (index >= 0) *value = inlet_at(instance, index, 1, t);"),
     ("I26 span read of a NULL name is not refused", I, "    if (!instance || !name) {\n        zero_fill(out, n);\n        return CANOPY_ERR_ARGUMENT;\n    }\n    if (!acquire(instance)) {\n        zero_fill(out, n);\n        return CANOPY_ERR_BUSY;\n    }\n    canopy_instance_adopt(instance);\n    index = outlet_by_name",
      "    if (!instance) {\n        zero_fill(out, n);\n        return CANOPY_ERR_ARGUMENT;\n    }\n    if (!acquire(instance)) {\n        zero_fill(out, n);\n        return CANOPY_ERR_BUSY;\n    }\n    canopy_instance_adopt(instance);\n    index = outlet_by_name"),
 ]

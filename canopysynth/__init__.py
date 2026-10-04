@@ -1,3 +1,7 @@
 """canopysynth: CANOPY, "C Audio Nodes in PYthon". See docs/canopy_design.md for the specification (version 1)."""
 from .version import CANOPYSYNTH_BUILD
 from .helpers import ns_to_frame, ns_to_frame_fraction
+from .errors import BoundaryError, GraphError, QueryError
+from .catalog import NodeTypes, register_migration
+from .graph import BoundaryInfo, Connection, Graph, Node, Port
+from .engine import Engine, Instance

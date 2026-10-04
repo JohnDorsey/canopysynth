@@ -22,8 +22,11 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def run_suite():
-    result = subprocess.run([sys.executable, "run_tests.py"], capture_output=True, text=True, cwd=ROOT)
+def run_suite(python_only=False):
+    """The whole suite. For a mutation in a .py file the C code is unchanged, so `python_only` skips the build and the two extra C runs
+    (the C tests still run once, and every Python test runs)."""
+    command = [sys.executable, "run_tests.py"] + (["--no-build", "--no-debug", "--no-asan"] if python_only else [])
+    result = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
     out = result.stdout + result.stderr
     if "the build failed" in out or "Build failed" in out:
         return "BUILD FAILED", [], out
@@ -31,6 +34,8 @@ def run_suite():
     if "did not finish" in out:
         return "caught", failed or ["(the C test program crashed)"], out
     summary = re.findall(r"(\d+) passed, (\d+) failed, (\d+) total", out)
+    if not summary:                                                       # no total at all: the run itself crashed, which is a detection too
+        return "caught", failed or ["(the test run crashed)"], out
     return ("caught" if failed or (summary and summary[-1][1] != "0") else "SURVIVED"), failed, out
 
 
@@ -69,7 +74,7 @@ def main(argv):
             with open(full, "wb") as handle:
                 handle.write(original.replace(old, new).replace("\n", "\r\n").encode("utf-8"))
             started = time.time()
-            state, failed, out = run_suite()
+            state, failed, out = run_suite(python_only=full.endswith(".py"))
             shutil.copy2(backups[full], full)
             tally[state] += 1
             names = ", ".join(n.replace("test_c_", "c:").replace("test_py_", "py:")[:60] for n in failed[:3])

@@ -58,9 +58,13 @@ static void data_release(void *block)
 
 /* ---- loading ---- */
 
+/* A drive path ("C:\x.wav", "C:/x.wav") or a network path (two separators). "C:x.wav" (relative to the current folder of drive C) and
+   "\x.wav" (rooted on the current drive) are relative. canopysynth/_values.py has the same rule (is_absolute_path); a test compares them. */
 static int absolute_path(const char *path)
 {
-    return (path[0] && path[1] == ':') || (path[0] == '\\' && path[1] == '\\') || (path[0] == '/' && path[1] == '/');
+    int separator0 = path[0] == '\\' || path[0] == '/', separator1 = path[0] && (path[1] == '\\' || path[1] == '/');
+    int letter = (path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z');
+    return (letter && path[1] == ':' && (path[2] == '\\' || path[2] == '/')) || (separator0 && separator1);
 }
 
 /* Reads the file into *out. On failure returns 0 with the reason in `why`. */
