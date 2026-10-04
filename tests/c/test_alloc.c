@@ -168,10 +168,54 @@ static void test_c_a_span_plan_reports_n_before_overflow(void)
     CHECK_INT(canopy_span_plan(0, INT64_MIN, 4, &plan), CANOPY_OK);           /* and so does t1 - t0 == INT64_MIN */
 }
 
+static void test_c_the_single_failure_hook_fails_exactly_the_allocation_it_was_told_to_and_no_other(void)
+{
+    int n, i;
+    for (n = 0; n < 6; n++) {
+        void *blocks[8];
+        int failed_at = -1, failures = 0;
+        canopy_alloc_fail_once(n);
+        for (i = 0; i < 8; i++) {
+            blocks[i] = canopy_alloc(16);
+            if (!blocks[i]) {
+                failures++;
+                failed_at = i;
+            }
+        }
+        canopy_alloc_fail_once(-1);
+        CHECK_INT(failures, 1);                                  /* one allocation fails... */
+        CHECK_INT(failed_at, n);                                 /* ...the one after n successful ones... */
+        for (i = 0; i < 8; i++) canopy_free(blocks[i]);          /* ...and everything after it works again */
+    }
+    {
+        void *first, *unhooked, *second;
+        canopy_alloc_fail_once(0);
+        unhooked = canopy_alloc_unhooked(8);                     /* an allocation of the kind the hooks do not reach neither fails nor counts down */
+        first = canopy_alloc(8);
+        second = canopy_alloc(8);
+        canopy_alloc_fail_once(-1);
+        CHECK(unhooked != NULL && first == NULL && second != NULL);
+        canopy_free(unhooked);
+        canopy_free(second);
+    }
+    {
+        void *a, *b;
+        canopy_alloc_fail_once(1);                               /* the two hooks together: the single failure and "everything after n" */
+        canopy_alloc_fail_after(2);
+        a = canopy_alloc(8);
+        b = canopy_alloc(8);
+        CHECK(a != NULL && b == NULL);                           /* the single failure came second, as told */
+        canopy_alloc_fail_once(-1);
+        canopy_alloc_fail_after(-1);
+        canopy_free(a);
+    }
+}
+
 void register_test_alloc(void)
 {
     RUN(test_c_allocations_are_zero_filled_counted_and_freed);
     RUN(test_c_the_allocation_hook_fails_the_nth_allocation_and_every_later_one);
+    RUN(test_c_the_single_failure_hook_fails_exactly_the_allocation_it_was_told_to_and_no_other);
     RUN(test_c_a_pool_frees_everything_at_once_and_can_be_reused);
     RUN(test_c_a_pool_leaks_nothing_when_an_allocation_fails_at_any_point);
     RUN(test_c_a_span_plan_agrees_with_canopy_sample_time_for_every_sample);

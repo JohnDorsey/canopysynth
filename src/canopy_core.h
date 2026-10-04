@@ -189,6 +189,7 @@ struct CanopyInstance {
     CanopyEngine *engine;
     atomic_int busy;
     atomic_uint_fast64_t epoch;        /* odd while a host query runs in this instance, even between them; read by the thread that retires data */
+    int service;                       /* made by the engine for one of its own nodes (CANOPY_FLAG_SERVICE), not by a host */
     /* used by the thread that queries (and read by the installing thread only through the atomics of the packages) */
     const CanopyCompiled *graph;
     void **states;                     /* one per node: what create_instance returned */
@@ -210,7 +211,9 @@ struct CanopyEngine {
     CanopyNodeRecord **records;        int32_t n_records, cap_records;      /* sorted by (id, type) */
     CanopyCompiled **compiled;         int32_t n_compiled, cap_compiled;    /* the graphs still held, oldest first */
     _Atomic(const CanopyCompiled *) current;
-    CanopyInstance **instances;        int32_t n_instances, cap_instances;  /* the live instances */
+    CanopyInstance **instances;        int32_t n_instances, cap_instances;  /* the live instances (the host's and the service instances) */
+    int32_t n_service;                 /* how many of them are service instances: the engine's own, for nodes with CANOPY_FLAG_SERVICE */
+    atomic_int audio_backend;          /* CANOPY_AUDIO_SYSTEM or CANOPY_AUDIO_NULL: where the preview nodes open devices */
     uint64_t serial;                   /* the serial of the newest graph made */
     uint64_t uid;                      /* the last record uid given */
     CanopyLock retire_lock;            /* guards `retired` (taken after the engine lock, never before it) */
@@ -222,17 +225,24 @@ struct CanopyEngine {
 /* canopy_install.c (the engine's lock held exclusively) */
 int32_t canopy_install(CanopyEngine *engine, CanopyCompiled *compiled);      /* takes ownership of `compiled`, also when it fails */
 void canopy_reclaim(CanopyEngine *engine);                                    /* frees what no instance can use any more */
+void canopy_services_stop(CanopyEngine *engine);                              /* destroys the shared resource of every CANOPY_FLAG_SERVICE node, while every graph is still there */
 void canopy_free_graph(CanopyEngine *engine, CanopyCompiled *compiled);
 void canopy_compiled_release(CanopyCompiled *compiled);                      /* frees a compiled graph that holds no record references */
 
 /* canopy_retire.c (the engine's lock held, shared or exclusive) */
 void canopy_retire_collect(CanopyEngine *engine);                             /* frees the retired data that no query can still be reading */
 void canopy_retire_forget(CanopyEngine *engine, CanopyInstance *instance);    /* an instance is going: nothing waits for it any more */
+void canopy_record_set_message(CanopyNodeRecord *record, const char *text);   /* canopy_ctx_set_message for a thread that has no context (a device's notification) */
 
 /* canopy_package.c: the thread that queries applies the packages that were prepared for its instance (no allocation, no lock) */
 void canopy_instance_adopt(CanopyInstance *instance);
 
 /* canopy_package.c (the engine's lock held exclusively) */
+/* An instance over the installed graph for one of the engine's own nodes (a CANOPY_FLAG_SERVICE node, in its action or its destroy handler).
+   NULL if no graph is installed or memory ran out. It is in the engine's list like a host's instance, so installs prepare it for new graphs. */
+CanopyInstance *canopy_service_instance_new(CanopyEngine *engine);
+/* Frees a service instance (its thread must be stopped). Does not reclaim graphs: its caller is, or is about to be, in canopy_reclaim. */
+void canopy_service_instance_free(CanopyEngine *engine, CanopyInstance *instance);
 CanopyPackage *canopy_package_build(CanopyEngine *engine, CanopyInstance *instance, const CanopyCompiled *to);   /* NULL if memory ran out */
 void canopy_package_discard(CanopyPackage *package);                         /* a package that was never queued or applied */
 void canopy_package_enqueue(CanopyInstance *instance, CanopyPackage *package);

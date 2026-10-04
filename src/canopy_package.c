@@ -196,18 +196,18 @@ static void instance_teardown(CanopyInstance *instance)
     canopy_free(instance);
 }
 
-CanopyInstance *canopy_engine_new_instance(CanopyEngine *engine)
+/* Makes an instance over the installed graph and enters it in the engine's list; the engine's lock is held exclusively. `service` is 1 for an
+   instance the engine makes for one of its own nodes. NULL if no graph is installed or memory ran out (then nothing is left). */
+static CanopyInstance *instance_make_locked(CanopyEngine *engine, int service)
 {
     const CanopyCompiled *graph;
     CanopyInstance *instance;
     CanopyPackage *sentinel;
     int32_t i;
-    if (!engine) return NULL;
-    canopy_lock_exclusive(&engine->lock);
     graph = atomic_load_explicit(&engine->current, memory_order_acquire);
-    if (!graph) goto none;
+    if (!graph) return NULL;
     instance = (CanopyInstance *)canopy_alloc(sizeof *instance);
-    if (!instance) goto none;
+    if (!instance) return NULL;
     sentinel = (CanopyPackage *)canopy_alloc(sizeof *sentinel);
     if (sentinel) {
         sentinel->from = sentinel->to = graph;
@@ -226,7 +226,7 @@ CanopyInstance *canopy_engine_new_instance(CanopyEngine *engine)
     }
     if (!sentinel || !instance->states || (graph->arena_floats > 0 && !instance->arena_block)) {
         instance_teardown(instance);
-        goto none;
+        return NULL;
     }
     for (i = 0; i < graph->n_nodes; i++) {
         const CanopyHandlers *handlers = &graph->nodes[i].type->handlers;
@@ -242,33 +242,58 @@ CanopyInstance *canopy_engine_new_instance(CanopyEngine *engine)
                                                                     (size_t)capacity * sizeof *grown);
         if (!grown) {
             instance_teardown(instance);
-            goto none;
+            return NULL;
         }
         engine->instances = grown;
         engine->cap_instances = capacity;
     }
+    instance->service = service;
     engine->instances[engine->n_instances++] = instance;
-    canopy_unlock_exclusive(&engine->lock);
+    if (service) engine->n_service++;
     return instance;
-none:
-    canopy_unlock_exclusive(&engine->lock);
-    return NULL;
 }
 
-void canopy_instance_free(CanopyInstance *instance)
+/* Takes an instance out of the engine's list and frees it; the engine's lock is held exclusively. */
+static void instance_remove_locked(CanopyEngine *engine, CanopyInstance *instance)
 {
-    CanopyEngine *engine;
     int32_t k;
-    if (!instance) return;
-    engine = instance->engine;
-    canopy_lock_exclusive(&engine->lock);
     for (k = 0; k < engine->n_instances; k++)
         if (engine->instances[k] == instance) {
             engine->instances[k] = engine->instances[--engine->n_instances];
             break;
         }
+    if (instance->service) engine->n_service--;
     canopy_retire_forget(engine, instance);
     instance_teardown(instance);
+}
+
+CanopyInstance *canopy_engine_new_instance(CanopyEngine *engine)
+{
+    CanopyInstance *instance;
+    if (!engine) return NULL;
+    canopy_lock_exclusive(&engine->lock);
+    instance = instance_make_locked(engine, 0);
+    canopy_unlock_exclusive(&engine->lock);
+    return instance;
+}
+
+void canopy_instance_free(CanopyInstance *instance)
+{
+    CanopyEngine *engine;
+    if (!instance) return;
+    engine = instance->engine;
+    canopy_lock_exclusive(&engine->lock);
+    instance_remove_locked(engine, instance);
     canopy_reclaim(engine);                              /* the graphs and shared resources this instance was the last to need */
     canopy_unlock_exclusive(&engine->lock);
+}
+
+CanopyInstance *canopy_service_instance_new(CanopyEngine *engine)
+{
+    return engine ? instance_make_locked(engine, 1) : NULL;
+}
+
+void canopy_service_instance_free(CanopyEngine *engine, CanopyInstance *instance)
+{
+    if (engine && instance) instance_remove_locked(engine, instance);
 }

@@ -18,10 +18,13 @@ python run_tests.py --no-debug      # skip the second, debug-heap run of the C t
 python run_tests.py --no-asan       # skip the third, AddressSanitizer run of the C tests
 powershell -ExecutionPolicy Bypass -File build.ps1    # only the build
 python dev/mutation/mutate.py dev/mutation/step3.py   # mutation check: breaks the C code in 83 specific ways, one at a time, and requires the
-                                                      # suite to notice each (about 15 s each; add a spec file per step; step4.py has 134, step5.py 53, step6.py 64)
+                                                      # suite to notice each (about 15 s each; add a spec file per step; step4.py has 134, step5.py 53, step6.py 64,
+                                                      # step7.py 142)
 python dev/mutation/mutate.py dev/mutation/step4.py N01 P30  # only the mutations whose first word is one of these (here N01 and P30)
                                                       # (a mutation that deadlocks, like the lock ones K01 to K06, is stopped by the runner after
                                                       # CANOPY_TEST_TIMEOUT seconds, default 180: set it to 30 for such a run)
+python dev/listen_check.py --list                     # the audio devices of this machine; without --list: the listening check of plan step 7 (needs a person
+                                                      # with ears: it plays test tones through the real preview node; --auto --backend null runs it silently)
 ```
 
 - Platform: Windows 64-bit, Python 3.9 or newer (tested on the installed 3.11), MSVC 2022 found through vswhere. Other operating systems are later.
@@ -35,9 +38,10 @@ python dev/mutation/mutate.py dev/mutation/step4.py N01 P30  # only the mutation
     instance to a newly installed graph), `canopy_instance.c` (queries, context calls, scratch arena), `canopy_test_nodes.c` (the hidden
     test-only node types, registered only by `canopy_registry_add_test_nodes`), `canopy_boundary.c` (the built-in boundary node types, registered
     by `canopy_registry_new`; tests that count types use `canopy_registry_new_empty`), `canopy_fileread.c` (the file node, with dr_wav), `canopy_retire.c`
-    (retiring replaced data by per-instance epochs, and node messages), `canopy_version.c`.
-  - `third_party/` vendored single headers, kept byte for byte as downloaded (LF line endings; provenance and hashes in its README): dr_wav.h is in;
-    miniaudio.h is added at plan step 7. Each download needs the author's permission.
+    (retiring replaced data by per-instance epochs, and node messages), `canopy_audio.c` (the only code that includes miniaudio: opens and lists
+    playback devices; `canopy_audio.h`), `canopy_preview.c` (the realtime preview node and its exported calls), `canopy_version.c`.
+  - `third_party/` vendored single headers, kept byte for byte as downloaded (LF line endings; provenance and hashes in its README): dr_wav.h and
+    miniaudio.h are in. Each download needs the author's permission.
   - `canopysynth/` the Python package (the built `canopysynth.dll` is written into it).
   - `tests/c/` plain C: `ctest.h` (`CHECK`, `CHECK_INT`, `CHECK_HEAP`, `RUN`), `support.c/.h` (guarded output buffers, the `test.*` node types, the `Rig`
     that builds a graph, engine and instance and checks for leaks on `rig_close`), one `test_<area>.c` per area registered in `run_c_tests.c`.
@@ -57,8 +61,15 @@ python dev/mutation/mutate.py dev/mutation/step4.py N01 P30  # only the mutation
   nothing and takes no lock (a C test holds the engine's lock itself and checks that queries go through while every other call waits); a span query
   that fails leaves `out` zero-filled (all n floats when n is valid); the knob and boundary slots store the value first and bump the generation
   second (see `canopy_core.h`). The engine's lock (`CanopyLock`, an SRW lock) is taken exclusively by installing, making and freeing instances and
-  collecting, and shared by the host calls that only use the lists (knob and boundary writes, actions, counts); an instance applies the packages
-  prepared for it at the start of a query by swapping pointers, and the editing thread frees what it has finished with (`canopy_instance_reap`).
+  collecting, and shared by the host calls that only use the lists (knob and boundary writes, actions, counts), except the buttons of a node with
+  `CANOPY_FLAG_SERVICE` (the realtime preview), which take it exclusively because they make and free the node's own instance; an instance applies
+  the packages prepared for it at the start of a query by swapping pointers, and the editing thread frees what it has finished with
+  (`canopy_instance_reap`). The preview's audio callback follows the query rules too (no allocation, no lock: tests count allocations while it plays
+  and hold the engine's locks).
+- Audio in tests: they choose the null backend (`canopy_engine_set_audio_backend(engine, CANOPY_AUDIO_NULL)`) and never open the machine's real
+  device (a bug or a mutation that sent them there would play their signals on it). miniaudio's own allocations are counted but not failed by the
+  tests' failure hook (it leaks when they fail inside `ma_device_init`: see the plan's step 7 decisions). Allocation hooks: `canopy_alloc_fail_after(n)`
+  fails everything after n, `canopy_alloc_fail_once(n)` fails exactly one.
 - Tests of threads must not depend on the scheduler: pace the writer by the readers' progress (see `wait_for_progress` in `test_swap.c`), never by
   hoping that the readers got time. A test that holds the lock itself is deterministic for the correct code (it waits for the calls that must go
   through and then 100 ms for the ones that must not).

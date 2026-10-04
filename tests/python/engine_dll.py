@@ -68,6 +68,13 @@ engine_node_message = declare("canopy_engine_node_message", i32, vp, i64, ctypes
 instance_read_at = declare("canopy_instance_read_at", f32, vp, cstr, i64)
 instance_read_span = declare("canopy_instance_read_span", i32, vp, cstr, i64, i64, i64, p_float)
 
+AUDIO_SYSTEM, AUDIO_NULL = 0, 1
+engine_set_audio_backend = declare("canopy_engine_set_audio_backend", i32, vp, i32)
+engine_audio_devices = declare("canopy_engine_audio_devices", i32, vp, ctypes.c_char_p, i32, ctypes.POINTER(i32))
+preview_state = declare("canopy_preview_state", i32, vp, i64, ctypes.POINTER(i32), ctypes.POINTER(i64))
+preview_set_time = declare("canopy_preview_set_time", i32, vp, i64, i64)
+preview_warning = declare("canopy_preview_warning", i32, vp, i64, ctypes.c_char_p, i32, ctypes.POINTER(i32))
+
 ctx_inlet_at = declare("canopy_inlet_at", f32, vp, i32, i64)
 ctx_inlet_span = declare("canopy_inlet_span", i32, vp, i32, i64, i64, i64, p_float)
 ctx_scratch = declare("canopy_scratch", p_float, vp, i64)

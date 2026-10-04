@@ -114,12 +114,10 @@ void canopy_retire_forget(CanopyEngine *engine, CanopyInstance *instance)
 
 /* ---- messages ---- */
 
-void canopy_ctx_set_message(CanopyCtx *ctx, const char *text)
+void canopy_record_set_message(CanopyNodeRecord *record, const char *text)
 {
-    CanopyNodeRecord *record;
     size_t length;
-    if (!ctx || !ctx->node || !ctx->node->record || !text) return;
-    record = ctx->node->record;
+    if (!record || !text) return;
     length = strlen(text);
     if (length > CANOPY_MESSAGE_BYTES - 1) {                       /* cut at a character boundary: never in the middle of a UTF-8 sequence */
         length = CANOPY_MESSAGE_BYTES - 1;
@@ -129,6 +127,12 @@ void canopy_ctx_set_message(CanopyCtx *ctx, const char *text)
     memcpy(record->message, text, length);
     record->message[length] = '\0';
     canopy_unlock_exclusive(&record->engine->message_lock);
+}
+
+void canopy_ctx_set_message(CanopyCtx *ctx, const char *text)
+{
+    if (!ctx || !ctx->node) return;
+    canopy_record_set_message(ctx->node->record, text);
 }
 
 int32_t canopy_engine_node_message(CanopyEngine *engine, int64_t node_id, char *buffer, int32_t capacity, int32_t *length)

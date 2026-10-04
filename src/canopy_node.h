@@ -95,7 +95,8 @@ typedef struct CanopyHandlers {
    Which thread: query_at and query_span run in the thread that queries. create_shared, destroy_shared, create_instance and destroy_instance
    run in the thread that installs a graph, makes or frees an instance, or collects (never in a thread that queries), with the engine's lock
    held: a slow one delays installs and knob writes, never a query. on_action runs in the thread that calls canopy_engine_action (the UI
-   thread) with the lock held shared: it delays installs (and, behind a waiting install, knob writes), never a query. None of these handlers
+   thread) with the lock held shared (exclusive for the buttons of the built-in realtime preview node, which make and free its audio instance): it
+   delays installs (and, behind a waiting install, knob writes), never a query. None of these handlers
    may call back into the engine (they have no way to; a node that kept an engine pointer of its own would deadlock). */
 
 /* Point query of an inlet: the connected outlet's answer for time `t`, or the inlet's knob position (-1..1, ignoring `t`) when nothing is

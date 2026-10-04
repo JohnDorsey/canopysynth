@@ -19,12 +19,13 @@
    progress. Every other call may be made from any thread: the engine holds a lock inside (except that canopy_engine_last_error reads the
    message of the last canopy_engine_set_graph, so ask it from the thread that installed). Installing (canopy_engine_set_graph), collecting,
    making and freeing an instance take the lock exclusively, one at a time; setting and getting a knob, writing a boundary value, pressing a button
-   (canopy_engine_action, whose handler runs in the calling thread while the lock is held shared) and the two counts take it shared, so
-   they run together and wait only for an install or the like in progress. A query never takes the lock and never waits for it. The node-type
-   handlers create_shared, destroy_shared, create_instance and destroy_instance run in whichever thread installs, collects, makes or frees
-   an instance, with the lock held (never in the thread that queries). A CanopyInstance is used by one thread at a time (a second concurrent
-   use is refused with CANOPY_ERR_BUSY where that can be detected). The registry must outlive the engine, and every instance must be freed
-   before its engine. */
+   (canopy_engine_action, whose handler runs in the calling thread while the lock is held shared, except for the preview node's, see below)
+   and the two counts take it shared, so they run together and wait only for an install or the like in progress. A query never takes the lock
+   and never waits for it. The node-type handlers create_shared, destroy_shared, create_instance and destroy_instance run in whichever thread
+   installs, collects, makes or frees an instance, with the lock held (never in the thread that queries). A CanopyInstance is used by one
+   thread at a time (a second concurrent use is refused with CANOPY_ERR_BUSY where that can be detected). The registry must outlive the
+   engine, and every instance a host made must be freed before its engine (the instances the engine made for its own nodes, the preview's, it
+   frees itself). */
 #ifndef CANOPY_ENGINE_H
 #define CANOPY_ENGINE_H
 
@@ -55,8 +56,8 @@ typedef struct CanopyEngine CanopyEngine;
 /* The registry is borrowed: it must outlive the engine. */
 CANOPY_API CanopyEngine *canopy_engine_new(const CanopyRegistry *registry);
 
-/* Frees the engine, its compiled graphs and its shared resources (calling each node type's destroy_shared). Returns CANOPY_ERR_BUSY, and
-   frees nothing, while an instance made from it still exists. */
+/* Frees the engine, its compiled graphs and its shared resources (calling each node type's destroy_shared; the preview nodes' devices are
+   stopped first). Returns CANOPY_ERR_BUSY, and frees nothing, while an instance the host made from it still exists. */
 CANOPY_API int32_t canopy_engine_free(CanopyEngine *engine);
 
 /* Compiles `graph` and installs it. Faults (all CANOPY_ERR_GRAPH, the message names the node, connection or setting at fault):
@@ -119,6 +120,55 @@ CANOPY_API int32_t canopy_engine_set_boundary(CanopyEngine *engine, const char *
 CANOPY_API int32_t canopy_engine_boundary_count(CanopyEngine *engine);
 CANOPY_API int32_t canopy_engine_boundary_at(CanopyEngine *engine, int32_t index, char *name, int32_t name_capacity, int32_t *name_length,
                                              int32_t *kind, int64_t *node_id);
+
+/* ---- audio output: the realtime preview node (design sections 8, 9 and 11) ----
+   The preview node (built in, key `realtime_preview`) is the only place where a playback state exists. It has the inlets left, right and
+   center and no outlets. While it plays, a device of the machine is opened at 48000 Hz (miniaudio converts if the hardware differs) and
+   every callback of the device asks the graph, in chunks of at most 65536 samples, for the three inlets over the time it is about to play,
+   and sends left + center to the left channel and right + center to the right channel; a sum beyond full scale is clipped, NaN is silence.
+   The graph runs in the audio thread, through an instance of its own that the engine makes for the node at its first Play.
+     Buttons      The node's widgets Play and Pause are on_action("play") and on_action("pause") (canopy_engine_action). Play opens the device
+                  named by the node's `device` setting (the text "(system default)", empty text, or a name no device has: the system default
+                  device) if none is open yet, and plays from the current position; Pause stops the position from moving and the device plays
+                  silence (it stays open, so that the graph keeps being adopted and Play answers at once). The action "device" switches to the
+                  device the setting now names, keeping the state. A device that cannot be opened leaves the node paused with its reason in
+                  canopy_engine_node_message. The device is closed when the node has left every graph in use (after the next install or collect),
+                  or when the engine is freed. Unlike other nodes, the buttons of this node run with the engine's lock held EXCLUSIVELY (they make
+                  and free the node's instance), so a Play delays installs and knob and boundary writes while the device opens (about 15 ms measured here).
+     Position     A time in nanoseconds, kept as a frame count at 48000 Hz; it starts at 0, moves only while playing, and keeps moving after the
+                  end of the audio (the graph answers silence there). If the node is not in the graph the audio thread runs (it was deleted), the
+                  output is silence and the position stands still.
+   The calls below take the engine's lock shared, like the other calls that read the lists. */
+enum { CANOPY_AUDIO_SYSTEM = 0, CANOPY_AUDIO_NULL = 1 };
+
+/* Which audio system the preview nodes of this engine open devices in: CANOPY_AUDIO_SYSTEM (the default: the operating system's, WASAPI on
+   Windows) or CANOPY_AUDIO_NULL (miniaudio's null backend: one device that takes the audio in real time and plays it nowhere; for tests, and
+   for hosts without sound hardware). Takes effect for devices opened afterwards. CANOPY_ERR_ARGUMENT for another value or a NULL engine. */
+CANOPY_API int32_t canopy_engine_set_audio_backend(CanopyEngine *engine, int32_t backend);
+
+/* The names of the playback devices the machine has now (in the audio system chosen above), as UTF-8 text with one name per line, separated
+   by '\n' and without a final newline (empty text for no device or no audio system), in the order the system lists them. The text is copied into
+   `buffer`, cut to `capacity` bytes and NUL-terminated if too small (buffer may be NULL when the capacity is 0); *length (may be NULL) gets the
+   full length in bytes, so a caller can ask again with a bigger buffer. This is what an editor adds to the fixed entry "(system default)" of
+   the preview's device choice. It takes a moment (the audio system is asked), so call it when the choice is opened, not for every redraw.
+   CANOPY_ERR_ARGUMENT for a NULL engine, a negative capacity or a NULL buffer with a capacity above 0, CANOPY_ERR_MEMORY. */
+CANOPY_API int32_t canopy_engine_audio_devices(CanopyEngine *engine, char *buffer, int32_t capacity, int32_t *length);
+
+/* The playback state of the preview node `node_id` of the installed graph: *playing is 1 while it plays (a Play that failed, a Pause and a device
+   that stopped by itself give 0), *time_ns the playback time in nanoseconds (the frame about to be handed to the device, so it leads what is
+   heard by the device's buffer, about 60 ms). Either pointer may be NULL. CANOPY_ERR_NODE if there is no such node, CANOPY_ERR_ARGUMENT if the
+   node is not a preview node or the engine is NULL. */
+CANOPY_API int32_t canopy_preview_state(CanopyEngine *engine, int64_t node_id, int32_t *playing, int64_t *time_ns);
+
+/* Moves the playback time of the preview node to `time_ns` (any time, negative ones too; rounded half up to a frame of 48000 Hz, so every whole
+   millisecond is exact). Works while playing (the next chunk starts there) and while paused. Statuses as for canopy_preview_state. */
+CANOPY_API int32_t canopy_preview_set_time(CanopyEngine *engine, int64_t node_id, int64_t time_ns);
+
+/* The warning of design section 9: text that names the nodes that feed the preview node (directly or not: the ones the audio thread runs)
+   whose type is not flagged realtime_safe, "not realtime safe, so the sound may break up: test.gain (node 3), test.gain (node 7)"; empty
+   text when there are none. Computed from the installed graph at every call, so it is never out of date. The copy protocol and the statuses
+   are those of canopy_preview_state, plus the buffer rules of canopy_engine_audio_devices. */
+CANOPY_API int32_t canopy_preview_warning(CanopyEngine *engine, int64_t node_id, char *buffer, int32_t capacity, int32_t *length);
 
 /* ---- instances ---- */
 typedef struct CanopyInstance CanopyInstance;

@@ -68,7 +68,8 @@ CanopyRegistry *canopy_registry_new_empty(void)
 CanopyRegistry *canopy_registry_new(void)
 {
     CanopyRegistry *registry = canopy_registry_new_empty();
-    if (registry && (canopy_boundary_register_types(registry) != CANOPY_OK || canopy_fileread_register_type(registry) != CANOPY_OK)) {   /* (the other built-in node types are registered here as they are added) */
+    if (registry && (canopy_boundary_register_types(registry) != CANOPY_OK || canopy_fileread_register_type(registry) != CANOPY_OK ||
+                     canopy_preview_register_type(registry) != CANOPY_OK)) {   /* (the other built-in node types are registered here as they are added) */
         canopy_registry_free(registry);
         return NULL;
     }
@@ -183,8 +184,8 @@ static int32_t validate(CanopyRegistry *registry, const CanopyNodeType *type, in
     if (canopy_registry_find(registry, type->key)) return fail(registry, CANOPY_ERR_DUPLICATE, "a node type with the key %s is already registered%s", type->key, "");
     if (!non_empty(type->name)) return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: the display name is empty%s", type->key, "");
     if (type->type_version < 1) return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: type_version must be at least 1%s", type->key, "");
-    if (type->flags & ~(builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE) : CANOPY_FLAGS_KNOWN))
-        return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: unknown flag bits%s", type->key, "");    /* (the boundary flags are for built-in types only) */
+    if (type->flags & ~(builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE | CANOPY_FLAG_SERVICE) : CANOPY_FLAGS_KNOWN))
+        return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: unknown flag bits%s", type->key, "");    /* (the boundary and service flags are for built-in types only) */
     if (type->scratch_buffers < 0) return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: scratch_buffers is negative%s", type->key, "");
     if (type->n_inlets < 0 || type->n_outlets < 0 || type->n_settings < 0 || type->n_widgets < 0)
         return fail(registry, CANOPY_ERR_DESCRIPTOR, "%s: a negative count%s", type->key, "");

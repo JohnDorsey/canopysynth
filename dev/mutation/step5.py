@@ -50,11 +50,11 @@ MUTATIONS = [
     ("B14 inlet is not registered by key boundary_inlet", B, '    type.key = "boundary_inlet";', '    type.key = "boundary_in";'),
     ("B15 inlet's outlet is called differently", B, 'static const CanopyOutletDesc INLET_OUTLETS[] = {{"out", "Out"}};', 'static const CanopyOutletDesc INLET_OUTLETS[] = {{"output", "Out"}};'),
     # ---- the registry ----
-    ("R20 a new registry has no built-in types", R, "    if (registry && (canopy_boundary_register_types(registry) != CANOPY_OK || canopy_fileread_register_type(registry) != CANOPY_OK)) {",
-     "    if (registry && (canopy_boundary_register_types(registry) == 12345 || canopy_fileread_register_type(registry) == 12345)) {"),
+    ("R20 a new registry has no built-in types", R, "    if (registry && (canopy_boundary_register_types(registry) != CANOPY_OK || canopy_fileread_register_type(registry) != CANOPY_OK ||\n                     canopy_preview_register_type(registry) != CANOPY_OK)) {",
+     "    if (registry && (canopy_boundary_register_types(registry) == 12345 || canopy_fileread_register_type(registry) == 12345 ||\n                     canopy_preview_register_type(registry) == 12345)) {"),
     ("R21 a registry that fails to get its types is returned", R, "        canopy_registry_free(registry);\n        return NULL;\n    }\n    return registry;", "        return NULL;\n    }\n    return registry;"),
-    ("R22 any type may be a boundary node", R, "CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE) : CANOPY_FLAGS_KNOWN))",
-     "CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE) : CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_NODE))"),
+    ("R22 any type may be a boundary node", R, "CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE | CANOPY_FLAG_SERVICE) : CANOPY_FLAGS_KNOWN))",
+     "CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE | CANOPY_FLAG_SERVICE) : CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_NODE))"),
     ("R23 a boundary node without a name setting is accepted", R, "        if (!has_name) return fail(registry,", "        if (has_name < 0) return fail(registry,"),
     ("R24 a name setting of any kind is accepted", R, "&& type->settings[i].kind == CANOPY_SETTING_STRING)\n                has_name = 1;", ")\n                has_name = 1;"),
     # ---- compiling: names ----

@@ -289,6 +289,7 @@ static void test_c_a_new_registry_that_runs_out_of_memory_is_complete_or_not_the
         canopy_alloc_fail_after(-1);
         if (registry) {
             CHECK(canopy_registry_find(registry, "boundary_inlet") != NULL && canopy_registry_find(registry, "boundary_outlet") != NULL);
+            CHECK(canopy_registry_find(registry, "file_read") != NULL && canopy_registry_find(registry, "realtime_preview") != NULL);
             complete++;
             canopy_registry_free(registry);
         } else {

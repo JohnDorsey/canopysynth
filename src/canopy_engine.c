@@ -424,10 +424,11 @@ int32_t canopy_engine_free(CanopyEngine *engine)
 {
     if (!engine) return CANOPY_OK;
     canopy_lock_exclusive(&engine->lock);
-    if (engine->n_instances != 0) {
+    if (engine->n_instances - engine->n_service != 0) {            /* (the instances the engine made for its own nodes do not hold it) */
         canopy_unlock_exclusive(&engine->lock);
         return CANOPY_ERR_BUSY;
     }
+    canopy_services_stop(engine);                                  /* nodes with a thread of their own stop first, while every graph they may refer to is still there */
     atomic_store_explicit(&engine->current, NULL, memory_order_release);
     while (engine->n_compiled > 0) {                 /* oldest first; the last one to go takes the last records, and their shared resources */
         CanopyCompiled *oldest = engine->compiled[0];
@@ -608,15 +609,31 @@ int32_t canopy_engine_boundary_at(CanopyEngine *engine, int32_t index, char *nam
     return status;
 }
 
+static void (*action_window_hook)(void);           /* test hook: called while a service node's button has let go of the lock and not yet taken it again */
+
+void canopy_engine_test_action_window(void (*hook)(void))
+{
+    action_window_hook = hook;
+}
+
 int32_t canopy_engine_action(CanopyEngine *engine, int64_t node_id, const char *action)
 {
     const CanopyCompiled *graph;
     const CanopyCNode *node;
     int32_t index = 0, status = CANOPY_OK;
+    int exclusive = 0;
     if (!engine || !action) return CANOPY_ERR_ARGUMENT;
     canopy_lock_shared(&engine->lock);
     graph = atomic_load_explicit(&engine->current, memory_order_acquire);
     node = graph ? canopy_compiled_find(graph, node_id, &index) : NULL;
+    if (node && (node->type->flags & CANOPY_FLAG_SERVICE)) {      /* the buttons of a node with a thread of its own make and free its instance: exclusive */
+        canopy_unlock_shared(&engine->lock);
+        if (action_window_hook) action_window_hook();
+        canopy_lock_exclusive(&engine->lock);
+        exclusive = 1;
+        graph = atomic_load_explicit(&engine->current, memory_order_acquire);          /* (it may have changed while the lock was let go) */
+        node = graph ? canopy_compiled_find(graph, node_id, &index) : NULL;
+    }
     if (!node) {
         status = CANOPY_ERR_NODE;
     } else if (node->type->handlers.on_action) {
@@ -624,6 +641,23 @@ int32_t canopy_engine_action(CanopyEngine *engine, int64_t node_id, const char *
         canopy_ctx_setup(&ctx, node, index, NULL);
         node->type->handlers.on_action(&ctx, action);
     }
-    canopy_unlock_shared(&engine->lock);
+    if (exclusive) canopy_unlock_exclusive(&engine->lock); else canopy_unlock_shared(&engine->lock);
     return status;
+}
+
+int32_t canopy_engine_set_audio_backend(CanopyEngine *engine, int32_t backend)
+{
+    if (!engine || (backend != CANOPY_AUDIO_SYSTEM && backend != CANOPY_AUDIO_NULL)) return CANOPY_ERR_ARGUMENT;
+    atomic_store(&engine->audio_backend, backend);
+    return CANOPY_OK;
+}
+
+int32_t canopy_engine_service_count(CanopyEngine *engine)
+{
+    int32_t count;
+    if (!engine) return -1;
+    canopy_lock_shared(&engine->lock);
+    count = engine->n_service;
+    canopy_unlock_shared(&engine->lock);
+    return count;
 }

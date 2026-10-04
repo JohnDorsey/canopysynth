@@ -8,10 +8,20 @@ static atomic_llong live_blocks;                 /* blocks allocated and not yet
 static atomic_llong total_allocations;           /* allocations and growths that succeeded */
 static atomic_llong fail_countdown = -1;         /* >0: that many more succeed; 0: all fail; <0: never fail */
 
+static atomic_llong once_countdown = -1;         /* >0: that many more succeed and then ONE allocation fails; 0: the next one fails; <0: off */
+
 /* 1 if this allocation is to fail; counts down while the allowed successes last. */
 static int should_fail(void)
 {
-    long long left = atomic_load(&fail_countdown);
+    long long once = atomic_load(&once_countdown), left;
+    while (once >= 0) {
+        if (once == 0) {
+            if (atomic_compare_exchange_weak(&once_countdown, &once, -1)) return 1;     /* this one, and only this one */
+        } else if (atomic_compare_exchange_weak(&once_countdown, &once, once - 1)) {
+            break;
+        }
+    }
+    left = atomic_load(&fail_countdown);
     for (;;) {
         if (left < 0) return 0;
         if (left == 0) return 1;
@@ -24,10 +34,15 @@ void canopy_alloc_fail_after(int64_t n)
     atomic_store(&fail_countdown, (long long)n);
 }
 
-void *canopy_alloc(size_t size)
+void canopy_alloc_fail_once(int64_t n)
+{
+    atomic_store(&once_countdown, (long long)n);
+}
+
+static void *alloc_block(size_t size, int hooked)
 {
     void *block;
-    if (should_fail()) return NULL;
+    if (hooked && should_fail()) return NULL;
     block = calloc(1, size ? size : 1);
     if (block) {
         atomic_fetch_add(&live_blocks, 1);
@@ -36,16 +51,36 @@ void *canopy_alloc(size_t size)
     return block;
 }
 
-void *canopy_realloc(void *block, size_t old_size, size_t new_size)
+static void *grow_block(void *block, size_t old_size, size_t new_size, int hooked)
 {
     void *grown;
-    if (!block) return canopy_alloc(new_size);
-    if (should_fail()) return NULL;
+    if (!block) return alloc_block(new_size, hooked);
+    if (hooked && should_fail()) return NULL;
     grown = realloc(block, new_size ? new_size : 1);
     if (!grown) return NULL;
     if (new_size > old_size) memset((char *)grown + old_size, 0, new_size - old_size);
     atomic_fetch_add(&total_allocations, 1);
     return grown;
+}
+
+void *canopy_alloc(size_t size)
+{
+    return alloc_block(size, 1);
+}
+
+void *canopy_realloc(void *block, size_t old_size, size_t new_size)
+{
+    return grow_block(block, old_size, new_size, 1);
+}
+
+void *canopy_alloc_unhooked(size_t size)
+{
+    return alloc_block(size, 0);
+}
+
+void *canopy_realloc_unhooked(void *block, size_t old_size, size_t new_size)
+{
+    return grow_block(block, old_size, new_size, 0);
 }
 
 void canopy_free(void *block)

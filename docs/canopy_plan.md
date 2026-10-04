@@ -1,6 +1,6 @@
 # CANOPY - build plan for version 1
 
-Created 2026-10-02. Status: **in progress** (steps 0 to 6 done).
+Created 2026-10-02. Status: **in progress** (steps 0 to 7 done; the author's listening check of step 7 is open).
 The design is `docs/canopy_design.md` (read it before every step). This plan builds exactly that design and nothing else.
 The project folder is `C:\Users\Argh\Documents\ai\projects\canopysynth`; the design and this plan live in its `docs\` folder.
 
@@ -186,14 +186,70 @@ Choices of mine that the design leaves open (the author may veto any of them):
    use the same mechanism. Cost: two sequentially consistent increments per host query. If retiring runs out of memory for its note, it waits for the
    running queries itself (the editing thread spins) instead of leaking or freeing early.
 
+## Decisions recorded at step 7 (asked and answered 2026-10-03)
+
+Answered by the author:
+- **miniaudio.h may be downloaded** (done: version 0.11.25, 4,108,168 bytes, from the tagged release, which that day was byte for byte the same as
+  master; public domain or MIT-0; provenance and SHA-256 in `third_party/README.md`).
+- **The preview's run-time data reaches the editor through exported C functions**, not through a change to the descriptor: `canopy_engine_audio_devices`
+  (the names of the devices present now), `canopy_preview_state` and `canopy_preview_set_time` (the playback time), `canopy_preview_warning` (the
+  not-realtime-safe text). Play and Pause stay `on_action` buttons, as in the design. The device CHOICE widget is declared with one fixed entry,
+  "(system default)", and the editor (step 12) adds the names that the function returns. The final descriptor and handler list are unchanged.
+
+Choices of mine that the design leaves open (the author may veto any of them):
+1. **The node**: key `realtime_preview`, name "Realtime preview", inlets left, right, center (knobs start at 0), no outlets, flags realtime_safe and
+   the built-in-only `CANOPY_FLAG_SERVICE`; one setting `device` (STRING, default "(system default)"); widgets Play and Pause (buttons) and Device
+   (CHOICE bound to the setting). The time field is not a descriptor widget: a TEXT widget edits a saved setting and the position is not saved, so
+   the editor draws the field from the state and set-time calls.
+2. **The device** is opened by the first Play (not when the node appears: loading a project must not grab the sound card), at 48000 Hz, stereo,
+   float32, periods of 20 ms, three of them (about 60 ms of latency; the constants `PERIOD_MS` and `PERIODS` in `canopy_audio.c`). It is then kept
+   open and silent while paused, so that the audio thread's instance goes on adopting edited graphs and Play answers within a period. It is closed
+   when the node has left every graph in use (after the next install or collect), when the engine is freed, and when Play or the action "device"
+   find that the setting names another device.
+3. **Which device**: the setting holds the device's name as the audio system reports it; "(system default)", empty text, or a name no device has
+   means the system default device. A non-empty name that no device has plays on the default (as the design says) and the node's message says so:
+   "audio device not found: NAME; using the system default". Changing the setting takes effect at the next Play or the action "device" (an install
+   does not reopen devices, as it does not reload files); the editor sends "device" after a change. Two devices with one name: the first wins.
+4. **The audio thread has an instance of its own**, made by the engine for the node at the first Play (a "service instance", flag
+   `CANOPY_FLAG_SERVICE`). It is in the engine's list, so installs prepare it like any other instance; `canopy_engine_free` does not count it as the
+   host's and stops such nodes first, while every graph is still there; it is made and freed only with the engine's lock held exclusively. So the
+   buttons of such a node run with the lock held **exclusively** (other nodes' shared): a Play delays installs and knob and boundary writes while the
+   device opens (measured with the real device: 12 to 17 ms for a Play on a closed device; CORRECTED after step 7: a "device" switch, which closes a
+   running device and opens another, holds the lock 63 to 73 ms on the real device and 21 to 33 ms on the null backend, and a thread writing a
+   boundary value every millisecond saw single calls stall up to 58 ms (real) / 33 ms (null) while it happened), never a query. The flag is
+   refused to third parties. (The first version of this note quoted only the Play figure; the close is the slow half.)
+5. **Time**: the position is a frame count at 48000 Hz (so every whole millisecond is exact: 48 frames), starts at 0, moves only while playing and
+   keeps moving after the end of the audio. Each callback asks each inlet for one span `[t(p), t(p+n))` of n samples (the exact times of the frame
+   boundaries, so consecutive callbacks tile), in chunks of at most 65536. A typed time is rounded half up to a frame. A seek made during a callback
+   wins over its advance. A time that cannot be written in nanoseconds (the very ends of the range) plays silence and stands still. The time shown
+   is the frame about to be handed to the device, so it leads what is heard by the device's buffer (about 60 ms; measured: Play then 1.000 s of wall
+   time moves it by 1.000 s).
+6. **Output**: left + center on the left channel, right + center on the right, added in float32 and clipped to -1..1; NaN is silence (not a click at
+   full scale), infinities clip. An inlet whose query fails counts as silence. If the node is not in the graph the audio thread's instance runs (it was
+   deleted) the output is silence and the position stands still.
+7. **The warning** is a separate call, computed on demand from the installed graph, naming the nodes that feed the preview (directly or not: the ones
+   the audio thread runs), not unrelated nodes of the same graph. The node's message is for the device's events only (not found, cannot open, stopped
+   by itself, out of memory).
+8. **A device that stops by itself** (unplugged) pauses the node and says so in its message; Play opens a device again. Until then the preview's
+   instance is idle and holds the graphs installed since (the known limit for idle instances).
+9. **Only two audio systems are compiled** into miniaudio: WASAPI (the system's, on Windows) and its null backend; decoding, encoding, the resource
+   manager, the node graph and the engine of miniaudio are off (the object is 1.1 MB; the DLL grew from 260 KB to 430 KB). The null backend is
+   chosen per engine, `canopy_engine_set_audio_backend`, for tests and for hosts without sound hardware (the tests rely on the null device's name in
+   this version, "NULL Playback Device"). The audio thread runs with denormals flushed to zero (miniaudio's default).
+10. **Found on the way**: miniaudio 0.11.25 leaks when one of its own allocations fails inside `ma_device_init` (its clean-up returns early for a
+    device that is half made: the intermediary buffer, and with the null backend a waiting thread, stay). Found by making each allocation fail in
+    turn. So its allocations are counted (the leak check sees them) but not failed by the tests' hook (`canopy_alloc_unhooked`); the failures of
+    everything of ours around it are still swept. Real failures of those allocations are reported as "out of memory" by a flag the allocation
+    callbacks set, but that mapping cannot be exercised by tests.
+
 ## Questions still to ask, and where
 
-(Answered at step 2: atomics = C11 stdatomic; no Python tier in version 1. Answered at step 4: how an instance adopts a new graph.)
+(Answered at step 2: atomics = C11 stdatomic; no Python tier in version 1. Answered at step 4: how an instance adopts a new graph. Answered at step 7:
+how the preview's run-time list of devices reaches a CHOICE widget.)
 
 | Question | Step |
 |---|---|
 | Package distribution format for the prebuilt DLL (wheel, a plain folder...) | 14 |
-| How the preview node's run-time list of audio devices is supplied to a CHOICE widget | 7 |
 
 ## Steps (one prompt each, unless stated; the effort level is what to set BEFORE telling me to continue)
 
@@ -411,13 +467,64 @@ Choices of mine that the design leaves open (the author may veto any of them):
   read in one go on the thread that presses open; 3.8 MB takes 5.5 ms, so a 1 GB file would take about 1.5 s there).
 - Done: 200 passed, 0 failed (161 C tests, each run three times, plus 39 Python tests).
 
-### Step 7 - realtime preview node and audio device. Recommended effort: MAX
-- [ ] miniaudio device ownership in C; play, pause, a settable time, device selection by name (default if missing), 48000 Hz, chunks of at most
-      65536, no Python in the audio callback, silence after the end, left+center / right+center with clipping.
-- [ ] The warning for graphs containing nodes without the `realtime_safe` flag (it warns; it does not refuse).
-- [ ] Tests on miniaudio's null backend; a manual listening check by the author (I cannot hear it), plus a throwaway test that the callback never
-      blocks or allocates.
-- Done when: the null-backend tests pass and the author has listened to a real device.
+### Step 7 - realtime preview node and audio device. Recommended effort: MAX - DONE (build 8), except the author's listening check
+- [x] Asked and decided (see "Decisions recorded at step 7"): the download of miniaudio.h, how the preview's run-time data reaches the editor.
+- [x] `third_party/miniaudio.h` (0.11.25, 4,108,168 bytes, SHA-256 in `third_party/README.md`), compiled only in `src/canopy_audio.c` with just WASAPI and
+      the null backend: `canopy_audio.h` has `canopy_audio_open` (stereo float32 at 48000 Hz, periods of 20 ms, by device name, the system default
+      when the name is empty, "(system default)" or unknown), `canopy_audio_close`, `canopy_audio_list`; one process-wide lock around miniaudio's
+      context and device calls (it says they are not safe from two threads at once).
+- [x] The engine's own instances (`CANOPY_FLAG_SERVICE`, `canopy_service_instance_new/free` in `canopy_package.c`): counted apart by
+      `canopy_engine_free`, made and freed under the exclusive lock, which the buttons of such a node therefore take (`canopy_engine_action`:
+      look, let go, take exclusive, look again); `canopy_services_stop` destroys such nodes' resources first when the engine is freed.
+- [x] `realtime_preview` (`src/canopy_preview.c`, built in, in every registry): inlets left, right, center; setting `device`; Play, Pause, Device
+      widgets; actions "play", "pause", "device"; the audio callback (`fill`) mixes left+center and right+center with clipping, NaN as silence, in
+      chunks of at most 65536; position as a frame count with compare-and-exchange so that a seek wins; messages for a missing device, a device that
+      cannot be opened, one that stopped, out of memory.
+- [x] Exported: `canopy_engine_set_audio_backend`, `canopy_engine_audio_devices`, `canopy_preview_state`, `canopy_preview_set_time`,
+      `canopy_preview_warning` (`canopy_engine.h`); internal hooks for tests (`canopy_preview_prepare/fill/counts/callback_counter/stop_device`,
+      `canopy_audio_force_failure/stop_for_test/describe/join_names`, `canopy_alloc_fail_once`, `canopy_alloc_unhooked`,
+      `canopy_engine_test_action_window`).
+- [x] Tests: `tests/c/test_audio.c` (the null backend: listing, real-time delivery at 48000 Hz stereo float, exact names, a device that stops by itself,
+      failure at each stage of opening, joining names, miniaudio's allocation callbacks, several threads at once), `tests/c/test_service.c` (exclusive
+      versus shared buttons, counting, the order of letting go at engine free, leaving every graph), `tests/c/test_preview.c` (the exact mix against
+      references, clipping and NaN, the exact times asked for and chunking at 65536 with a recorder node, seek wins, paused, a deleted node, the warning,
+      play/pause/resume in real time on the null device, fallback, the device action, a device that stops by itself, out of memory at every point of
+      Play and of switching, the audio thread never waiting for the engine's locks and allocating nothing, two previews, buttons pressed while another
+      thread installs graphs, a graph installed in the very moment a button waits for the lock), `tests/python/test_preview.py` (through the DLL:
+      list, buttons, time, a node written in Python run by the audio thread and asked for consecutive frames, the warning, statuses),
+      `dev/mutation/step7.py`.
+- [x] `dev/listen_check.py`: the listening check for the author (below).
+- [ ] **The author's listening check on a real device**: `python dev/listen_check.py` (after `--list` to see the devices); it plays test tones through
+      the real preview node and asks what was heard; the author's answers close this step.
+- Verified (ran it): `python run_tests.py`: 264 passed, 0 failed: 219 C tests, each run three times (normal, debug heap, AddressSanitizer), plus 45
+  Python tests (58 C tests and 6 Python tests are new). Stable: the C program 12 times on an idle machine and 6 times with 24 busy processes on 12
+  cores (about 15 times slower), no failure. The mutation check on the new code, `dev/mutation/step7.py` (142 deliberate faults in the audio layer,
+  the preview, the engine's own instances, the buttons, the allocation hooks), each followed by the whole suite: all detected, 19 only by a crash. The
+  first run (143) found real gaps in my tests, now closed: nothing tested the message of a device that cannot be opened (the null backend never fails:
+  hence `canopy_audio_force_failure`), nor miniaudio's growing callback under the failure hook, nor the exact meaning of the single-failure hook; two
+  faults of mine in the spec did not compile and were rewritten; one (freeing a service instance also reclaims) is equivalent and was dropped. The
+  older specs were re-run on the changed engine code (the instance functions were split, the engine free and the buttons changed) in parallel copies of
+  the project: step 3 all 83, step 4 all 134, step 5 all 53, step 6 all 64 caught (334 of 334). Eight entries whose text had moved (the engine free's
+  check for instances, the registry's flag mask and its creation of the built-in types, the lock blocks of the buttons and of freeing an instance)
+  were re-pointed first and run on their own. Two things went wrong in the process and were redone: a first attempt with eight copies at once ran
+  past the 60 s hang limit of the baseline (the suite was fine; fewer copies and 120 s), and I overlaid files into a copy while a mutation was
+  running in it, so that one result (step 6's F09) was false; it was re-run alone and is caught.
+  Measured (throwaway programs, optimised build, quiet machine): one audio callback of 960 frames (the 20 ms period) costs 0.9 us with the three
+  inlets as knobs, 10 us with a stereo float file on left and right (10 ns per frame, 0.05% of the 20 ms), 1.9 us for ten gain nodes in a row; Play
+  on the null backend 1.6 ms (the first one 4 ms), Pause 0.3 us, freeing an engine with an open device 0.3 ms. With the REAL device (silence only,
+  through the DLL from Python): Play 12 to 17 ms, the preview time advances by exactly the wall time (1.000 s per 1.000 s), Pause holds it still,
+  freeing the engine takes 50 to 60 ms, nothing leaked, and it works with COM set up as a single-threaded apartment on the calling thread. The
+  default device of this machine is "LG TV SSCR2 (NVIDIA High Definition Audio)" (the only playback device).
+  Found on the way: miniaudio leaks when its own allocation fails inside `ma_device_init` (decision 10 above); my tests drew a clipped output as if
+  it were the time (the output is clipped to -1..1, so times are read from a recorder node's log); the Windows headers define `OUT` and `small`
+  (they broke two test variables); a graph made before `rig_open` counted its blocks into the leak baseline (again).
+- Believed, not verified: that what the author HEARS is right (the buffer handed to the device is verified exactly against references; nothing here
+  can hear it, hence the listening check); that WASAPI behaves the same for other devices, in exclusive mode of another program, and when a device is
+  unplugged (a stop is only simulated, on the null backend); other COM apartment modes; that the "out of memory" mapping of a real miniaudio
+  allocation failure works (the tests cannot make miniaudio's allocations fail, decision 10); how a heavy graph behaves in the audio thread (no
+  heavy node exists yet; the callback itself costs microseconds); the memory ordering on CPUs other than x64; that the idle-instance retention of a
+  stopped device matters little (graphs are small).
+- Done: 264 passed, 0 failed (219 C tests, each run three times, plus 45 Python tests). The author's listening check is open.
 
 ### Step 8 - Python graph model and serialization. Recommended effort: HIGH
 - [ ] `Graph`: add/connect/disconnect/remove, node IDs (never reused), settings, knobs, boundary names, the loop check and `loop_protection`
@@ -446,6 +553,13 @@ Choices of mine that the design leaves open (the author may veto any of them):
 ### Step 12 - editor integration and live editing. Recommended effort: HIGH
 - [ ] Editor edits trigger compile-and-swap on the Engine; the FileReadNode "open" button and error text; the preview node's play, pause, time field
       (hh:mm:ss.mmm), device list and warning display; compile errors shown while the previous graph keeps running.
+      The calls step 7 built for this: Play and Pause are `canopy_engine_action(node, "play" / "pause")`; the time field polls `canopy_preview_state`
+      (playing, time in ns) while it is visible and, on Enter, parses hh:mm:ss.mmm and calls `canopy_preview_set_time`; the device choice, when it is
+      opened, asks `canopy_engine_audio_devices` (names separated by newlines) and shows "(system default)" plus those names, and on a selection
+      sets the node's `device` setting (compile-and-swap) and then sends the action "device" (a changed setting alone does not reopen the device);
+      the node's note is `canopy_engine_node_message`, refreshed after every action and install; the warning is `canopy_preview_warning`, asked
+      after every install; after an edit that deletes a preview node the editor calls `canopy_engine_collect` (the device of a deleted preview is
+      closed when the engine lets go of the last graph that has the node).
 - Done when: editing during playback works with the null backend in a throwaway script, and the author confirms it with a real device.
 
 ### Step 13 - whole-system verification. Recommended effort: MAX
@@ -462,6 +576,26 @@ Choices of mine that the design leaves open (the author may veto any of them):
 - [ ] Walk `canopy_design.md` statement by statement against the "Design coverage" table; list anything unbuilt or built but not in the design;
       ask the author about each difference.
 - Done when: the table is complete and the author accepts the audit.
+
+## Deferred ideas (not scheduled; each one has a trigger that would schedule it)
+
+### D1 - Slow device work outside the engine's lock (alternative "G" of step 7 choice 4)
+Today a preview button holds the engine's lock exclusively while miniaudio opens (12-17 ms) or closes (up to ~50 ms) a device. Measured with a
+writer thread calling `canopy_engine_set_boundary` every millisecond: single calls stalled up to 58 ms (real device) while a switch ran. A driver
+that hangs would hold the lock and freeze the calling thread. The idea: only the quick parts (making and freeing the service instance, committing
+the result) run under the lock; `canopy_audio_open` and `canopy_audio_close` run outside it.
+- **Trigger:** a real driver (the author's, or another) where a press takes hundreds of ms or hangs; or a host that cannot tolerate a one-to-four
+  frame hitch in a render thread's boundary writes when the user presses a preview button. Check at steps 12 and 13 (the editor with a real device).
+- **Protocol sketch:** a state per preview resource (CLOSED, OPENING, OPEN, CLOSING), a reference count and a `dying` flag. Open: under the lock
+  validate, copy the device name, make buffers and instance, state OPENING, take a reference; outside the lock open the device; under the lock
+  commit (or, if `dying` or superseded, discard what was made). Close: under the lock take the device pointer, state CLOSING; outside the lock join
+  its thread; under the lock free the instance and buffers. A press that finds OPENING/CLOSING records what it wants (last writer wins) and the
+  busy thread applies it at commit. `destroy_shared` runs inside a reclaim and cannot let go of the lock: phase 1 keeps its close under the lock;
+  phase 2, if needed, hands the device to a deferred-close list that is drained after the lock is released. `canopy_engine_free` must drain it.
+- **Tests first:** a hook between the phases (like `canopy_engine_test_action_window`) to force each interleaving: node deleted and collected while
+  OPENING; a second press while OPENING or CLOSING; a failed open on a dying node; OOM sweeps of every phase; and an acceptance test with a hook
+  that makes open and close sleep 200 ms, in which a boundary write from another thread must complete within 20 ms. A mutation spec for the new code.
+- **Cost / risk:** about one MAX-effort step; the risk is the state machine, so it is worth doing only when the trigger is real.
 
 ## Design coverage (which step builds which part of canopy_design.md)
 
@@ -495,7 +629,7 @@ Choices of mine that the design leaves open (the author may veto any of them):
 | 4 | done (build 5) | generation numbers and stamps, records per node ID and type, compile-and-swap by packages prepared by the editing thread, the engine's lock, the hidden filter; 135 deliberate faults all detected (5 gaps in my tests found and closed on the way), the 83 faults of step 3 re-run on the new code; the C tests now also run under AddressSanitizer; decisions recorded, known limits measured |
 | 5 | done (build 6) | boundary inlet and outlet types, unique non-empty names, host calls by name, listing; mutation-checked; registry now holds the built-in types |
 | 6 | done (build 7) | dr_wav vendored; retiring of replaced data with per-instance epochs; node messages; the file_read node; mutation-checked |
-| 7 | not started | |
+| 7 | done (build 8), listening check by the author open | miniaudio vendored (WASAPI + null backend); the audio device layer; the engine's own (service) instances and exclusive buttons; the `realtime_preview` node with exported calls for the editor; a throwaway-measured callback of 1 to 10 us; mutation-checked (142 faults); `dev/listen_check.py` for the author |
 | 8 | not started | |
 | 9 | not started | |
 | 10 | not started | |

@@ -43,16 +43,21 @@ SET_BOUNDARY = (SHARED_LOCK + "    graph = atomic_load_explicit(&engine->current
                 "    else if (!(node->type->flags & CANOPY_FLAG_BOUNDARY_SLOT)) status = CANOPY_ERR_ARGUMENT;\n"
                 "    else canopy_slot_write(&node->record->boundary, value);                  /* any float: nothing is clamped on the way in */\n"
                 + SHARED_UNLOCK)
+ACTION_UNLOCK = "    if (exclusive) canopy_unlock_exclusive(&engine->lock); else canopy_unlock_shared(&engine->lock);"
 ACTION = (SHARED_LOCK + "    graph = atomic_load_explicit(&engine->current, memory_order_acquire);\n"
-          "    node = graph ? canopy_compiled_find(graph, node_id, &index) : NULL;\n    if (!node) {\n        status = CANOPY_ERR_NODE;\n"
+          "    node = graph ? canopy_compiled_find(graph, node_id, &index) : NULL;\n"
+          "    if (node && (node->type->flags & CANOPY_FLAG_SERVICE)) {      /* the buttons of a node with a thread of its own make and free its instance: exclusive */\n"
+          "        canopy_unlock_shared(&engine->lock);\n        if (action_window_hook) action_window_hook();\n        canopy_lock_exclusive(&engine->lock);\n"
+          "        exclusive = 1;\n"
+          "        graph = atomic_load_explicit(&engine->current, memory_order_acquire);          /* (it may have changed while the lock was let go) */\n"
+          "        node = graph ? canopy_compiled_find(graph, node_id, &index) : NULL;\n    }\n"
+          "    if (!node) {\n        status = CANOPY_ERR_NODE;\n"
           "    } else if (node->type->handlers.on_action) {\n        struct CanopyCtx ctx;\n        canopy_ctx_setup(&ctx, node, index, NULL);\n"
-          "        node->type->handlers.on_action(&ctx, action);\n    }\n" + SHARED_UNLOCK)
+          "        node->type->handlers.on_action(&ctx, action);\n    }\n" + ACTION_UNLOCK)
 SET_GRAPH = (EXCLUSIVE_LOCK + "    status = canopy_install(engine, compiled);\n    if (status == CANOPY_OK) canopy_reclaim(engine);\n"
              "    else memory_error(engine);\n" + EXCLUSIVE_UNLOCK)
 COLLECT = EXCLUSIVE_LOCK + "    canopy_reclaim(engine);\n    held = engine->n_compiled;\n" + EXCLUSIVE_UNLOCK
-INSTANCE_FREE = (EXCLUSIVE_LOCK + "    for (k = 0; k < engine->n_instances; k++)\n        if (engine->instances[k] == instance) {\n"
-                 "            engine->instances[k] = engine->instances[--engine->n_instances];\n            break;\n        }\n"
-                 "    canopy_retire_forget(engine, instance);\n    instance_teardown(instance);\n"
+INSTANCE_FREE = (EXCLUSIVE_LOCK + "    instance_remove_locked(engine, instance);\n"
                  "    canopy_reclaim(engine);                              /* the graphs and shared resources this instance was the last to need */\n"
                  + EXCLUSIVE_UNLOCK)
 
@@ -249,9 +254,9 @@ MUTATIONS = [
     ("E71 failed install gives no message", E, "    if (status == CANOPY_OK) canopy_reclaim(engine);\n    else memory_error(engine);",
      "    if (status == CANOPY_OK) canopy_reclaim(engine);"),
     # ---- registry: the boundary flag is for built-in types only ----
-    ("R10 any type may have a boundary slot", R, "builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE) : CANOPY_FLAGS_KNOWN",
-     "(CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE)"),
-    ("R11 no type may have a boundary slot", R, "builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE) : CANOPY_FLAGS_KNOWN",
+    ("R10 any type may have a boundary slot", R, "builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE | CANOPY_FLAG_SERVICE) : CANOPY_FLAGS_KNOWN",
+     "(CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE | CANOPY_FLAG_SERVICE)"),
+    ("R11 no type may have a boundary slot", R, "builtin ? (CANOPY_FLAGS_KNOWN | CANOPY_FLAG_BOUNDARY_SLOT | CANOPY_FLAG_BOUNDARY_NODE | CANOPY_FLAG_SERVICE) : CANOPY_FLAGS_KNOWN",
      "CANOPY_FLAGS_KNOWN"),
     # ---- the lock: a missing lock is only seen by a test that holds it itself ----
     ("K01 exclusive lock does nothing", K, "static inline void canopy_lock_exclusive(CanopyLock *lock) { AcquireSRWLockExclusive(lock); }",
@@ -276,7 +281,7 @@ MUTATIONS = [
      "static inline void canopy_unlock_shared(CanopyLock *lock) { (void)lock; }"),
     ("E50 set_knob takes no lock", E, *without(SET_KNOB, SHARED_LOCK, SHARED_UNLOCK)),
     ("E51 get_knob takes no lock", E, *without(GET_KNOB, SHARED_LOCK, SHARED_UNLOCK)),
-    ("E53 action takes no lock", E, *without(ACTION, SHARED_LOCK, SHARED_UNLOCK)),
+    ("E53 action takes no lock", E, *without(ACTION, SHARED_LOCK, ACTION_UNLOCK)),
     ("E54 node_count takes no lock", E, *without(NODE_COUNT, SHARED_LOCK, SHARED_UNLOCK)),
     ("E55 graph_serial takes no lock", E, *without(GRAPH_SERIAL, SHARED_LOCK, SHARED_UNLOCK)),
     ("E56 set_graph takes no lock", E, *without(SET_GRAPH, EXCLUSIVE_LOCK, EXCLUSIVE_UNLOCK)),

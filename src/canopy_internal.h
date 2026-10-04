@@ -2,6 +2,7 @@
 #ifndef CANOPY_INTERNAL_H
 #define CANOPY_INTERNAL_H
 
+#include <stdatomic.h>
 #include <stddef.h>
 #include "canopy_engine.h"
 
@@ -28,6 +29,28 @@ float canopy_ctx_boundary_value(CanopyCtx *ctx);                    /* 0.0f for 
    whose type has no boundary slot. */
 int32_t canopy_engine_set_boundary_value(CanopyEngine *engine, int64_t node_id, float value);
 
+/* ---- audio output (canopy_audio.c: miniaudio; canopy_preview.c: the realtime preview node; design sections 8, 9 and 11) ----
+   CANOPY_FLAG_SERVICE is a built-in-only type flag: the node runs a thread of its own that queries the graph through an instance the engine
+   makes for it (a "service instance", made and freed with the engine's lock held exclusively and not counted as an instance of the host by
+   canopy_engine_free). The actions of such a node therefore run with the lock held exclusively, and canopy_engine_free destroys the shared
+   resources of such nodes first, while every graph is still there. Third-party registration refuses the flag. */
+#define CANOPY_FLAG_SERVICE 32u
+#define CANOPY_AUDIO_RATE 48000
+#define CANOPY_AUDIO_DEFAULT_NAME "(system default)"      /* the value of the preview's device setting that means the system default */
+int32_t canopy_preview_register_type(CanopyRegistry *registry);
+
+/* For tests and diagnostics (not exported). The preview node's audio thread is the miniaudio callback; tests run the same work directly.
+   These return CANOPY_OK, CANOPY_ERR_NODE (no such node in the installed graph) or CANOPY_ERR_ARGUMENT (not a preview node, a NULL engine). */
+int32_t canopy_preview_prepare(CanopyEngine *engine, int64_t node_id, int32_t playing);          /* the buffers and the service instance, without a device; sets "playing" */
+int32_t canopy_preview_fill(CanopyEngine *engine, int64_t node_id, float *stereo, uint32_t frames);   /* one audio callback, run by the caller */
+int32_t canopy_preview_counts(CanopyEngine *engine, int64_t node_id, int64_t *callbacks, int64_t *opens);   /* audio callbacks so far, devices opened so far */
+const atomic_llong *canopy_preview_callback_counter(CanopyEngine *engine, int64_t node_id);   /* the callbacks counter itself, to be read without any lock (NULL: no such preview node); valid while the node lives */
+int32_t canopy_preview_stop_device(CanopyEngine *engine, int64_t node_id);                       /* the device stops by itself, as when it is unplugged */
+int32_t canopy_engine_service_count(CanopyEngine *engine);                                        /* the instances the engine made for its own nodes */
+/* Test hook: `hook` is called (once per press of a service node's button) at the moment when the button has let go of the shared lock and has not
+   yet taken the exclusive one, which is where another thread's install can replace the graph; NULL turns it off. */
+void canopy_engine_test_action_window(void (*hook)(void));
+
 /* ---- memory ----
    Every allocation of the library goes through these, so that tests can count live blocks (a leak check that works in every build) and make
    the Nth allocation fail (to run the out-of-memory paths). Blocks are zero-filled. The counters are atomic; the failure hook is for
@@ -37,6 +60,14 @@ void *canopy_realloc(void *block, size_t old_size, size_t new_size);  /* the new
 void canopy_free(void *block);                                      /* NULL is fine */
 /* Test hook: after `n` more successful allocations every allocation fails, until called again; a negative n turns the failures off. */
 void canopy_alloc_fail_after(int64_t n);
+/* Test hook: the allocation after `n` more successful ones fails, that one only (then everything works again); a negative n turns it off. It
+   reaches the code that copes with ONE failed allocation (a node whose shared resource could not be made), which the hook above cannot. */
+void canopy_alloc_fail_once(int64_t n);
+/* The same two calls, counted the same and freed with canopy_free, but never made to fail by canopy_alloc_fail_after: for code that is not ours
+   (miniaudio), whose own paths after a failed allocation are not ours to test: it was found to leak when memory runs out inside ma_device_init
+   (its clean-up returns early for a device that is half made, leaving the intermediary buffer, and with the null backend a waiting thread). */
+void *canopy_alloc_unhooked(size_t size);
+void *canopy_realloc_unhooked(void *block, size_t old_size, size_t new_size);
 
 /* A pool owns many small blocks and frees them all together, so a structure built of many pieces needs one cleanup, also when building it
    fails half way. Blocks are zero-filled. */

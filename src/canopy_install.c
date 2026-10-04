@@ -164,6 +164,25 @@ void canopy_free_graph(CanopyEngine *engine, CanopyCompiled *compiled)
     canopy_compiled_release(compiled);
 }
 
+/* The nodes with CANOPY_FLAG_SERVICE run threads of their own, which use instances that refer to the graphs; so their shared resources are
+   destroyed (the threads stopped, the instances freed) before the engine lets go of any graph. `published` is the node of the newest graph that
+   has the record, a graph that is still held while the record lives. */
+void canopy_services_stop(CanopyEngine *engine)
+{
+    int32_t i;
+    for (i = 0; i < engine->n_records; i++) {
+        CanopyNodeRecord *record = engine->records[i];
+        if ((record->type->flags & CANOPY_FLAG_SERVICE) && record->shared && record->published) {
+            if (record->type->handlers.destroy_shared) {
+                struct CanopyCtx ctx;
+                canopy_ctx_setup(&ctx, record->published, 0, NULL);
+                record->type->handlers.destroy_shared(&ctx, record->shared);
+            }
+            record->shared = NULL;                                 /* (destroyed: the record's own destruction must not do it again) */
+        }
+    }
+}
+
 void canopy_reclaim(CanopyEngine *engine)
 {
     const CanopyCompiled *current = atomic_load_explicit(&engine->current, memory_order_acquire);
