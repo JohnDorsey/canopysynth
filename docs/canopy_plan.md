@@ -1,6 +1,6 @@
 # CANOPY - build plan for version 1
 
-Created 2026-10-02. Status: **in progress** (steps 0 to 9 done; the author's listening check of step 7 passed).
+Created 2026-10-02. Status: **in progress** (steps 0 to 10 done, the author's try-out of the editor still open; the author's listening check of step 7 passed).
 The design is `docs/canopy_design.md` (read it before every step). This plan builds exactly that design and nothing else.
 The project folder is `C:\Users\Argh\Documents\ai\projects\canopysynth`; the design and this plan live in its `docs\` folder.
 
@@ -356,6 +356,44 @@ were changed to match (marked in the text).
    Mistakes of mine, corrected: my launcher for the parallel mutation copies did not start any job the first time (detached children with a quoting
    error; found because no log appeared, relaunched through script files); a first throwaway benchmark would not link (two harness symbols); one of
    my new tests assumed the wrong default knob.
+
+## Decisions recorded at step 10 (no question was needed; implementation choices the design leaves open: the author may veto any)
+
+The look follows the author's mock-up of a future third-party node ("Multiply"), shown at the start of the step 10 session.
+1. **Layout of the code.** `canopysynth/editor/`: `theme.py` (every colour and size in one place), `geometry.py` (the view, node layout, hit testing,
+   wire and rounded shapes: no Tk, so it is tested without a window), `canvas.py` (the `Editor` Frame). `canopysynth.Editor` is imported when first
+   used (a module `__getattr__`), so importing the package does not load tkinter. The model gained `Graph.can_connect(outlet, inlet)`: None, or the
+   sentence `connect` would raise with (the editor shows which inlets a wire may go to and says why not; tested to agree with `connect` on 2400 random
+   asks).
+2. **Looks** (all in `theme.py`): dark background; grey rounded nodes with a black outline (light blue when selected); diamond ports in yellow-green on the
+   node's edge (inlets left, outlets right, spread evenly down each side); blue S-shaped wires with horizontal handles. **Built-in nodes** (keys without a dot)
+   show their title in off-white bold monospaced text on the background above the body; **third-party nodes** have a title bar inside the node whose
+   colour says realtime safe or not: the cream of the mock-up for realtime safe, a salmon colour for not (the author said to pick a couple). Port labels
+   are not written on the node (the mock-up has none): the label of the port under the pointer shows beside it. Nodes are as wide as their title needs
+   (at least 140 units) and as tall as their ports need (at least two rows of 30); a node's x and y are the top-left of its body.
+3. **What is not in this step**, which the mock-up also shows: the knob in its pill beside each inlet (and its translucence while a wire is dragged, and
+   what a connected inlet shows), the node's widgets, and the node and connection menus: step 11. Room for the knobs is to the left of the node, outside the
+   rectangle the layout returns, so the layout does not have to change.
+4. **The mouse.** Left button: drag a node by its body, bar or title text (it is selected and comes to the front; the order is not saved); drag from an
+   outlet to an inlet, or from a free inlet to an outlet. **Pressing an inlet that already has a wire starts nothing** (it says so below the picture and
+   selects the node): picking the wire up would delete a connection, which the design gives to a menu. While a wire is dragged the ports it may be
+   dropped on get a white outline, the others are dimmed, and the wire snaps to an allowed port near the pointer; dropping on a refused port says why
+   (the model's sentence, for six seconds) and changes nothing; dropping anywhere else does nothing; Escape drops the wire. Wheel: zoom by 10% a notch
+   around the pointer (0.2 to 4). Shift+wheel: scroll sideways; Alt+wheel: up and down (60 pixels a notch; wheel up moves the picture right or down, as
+   scrolling a document up does). Middle button drag: pan. Right click on the background: the list of node types (built-in first, then third-party
+   ones, the not realtime safe ones marked, the hidden test type left out), adding a node with its top-left at the click. Home: fit the whole graph
+   (also done once when the window first has a size).
+5. **Telling the host.** The editor edits the Graph it was given. `add_listener(f)`: `f(kind)` after every edit by the user, kind `"added"`,
+   `"connected"` or `"moved"`; the virtual event `<<GraphChanged>>` is generated for all but moves. Step 12 hangs `Engine.update()` on these (not on
+   moves: a position changes nothing the engine uses).
+6. **Drawing** deletes and redraws everything, coalesced to once at idle time, leaving out nodes and wires that are off the screen (with a margin of 60
+   pixels). Measured (throwaway script, quiet machine, a window of 1000 x 680): a redraw costs about 0.45 ms per node and its wires (10 nodes 5.6 ms,
+   50 nodes 23 ms, 200 nodes 88 ms, 600 nodes 270 ms, everything on the screen), and a drag step costs one redraw. That is smooth up to about 50 nodes
+   and sluggish at 200; the profile says the time is in Tk item creation (45%) and the corner shapes recomputed each time (14%), so the next steps to
+   take, if ever needed, are caching those shapes and moving the items of a dragged node instead of redrawing. Real graphs are tens of nodes.
+7. **Testing the window.** Tests use a real window placed at +6000+6000: a withdrawn window gets no synthetic events, an off-screen mapped one does and
+   nothing flashes. A picture of the window cannot be taken off-screen (Windows does not paint it), so the look was checked by showing the window on
+   the screen for a moment (`dev/editor_check.py --screenshot`).
 
 ## Questions still to ask, and where
 
@@ -720,16 +758,48 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
   not in the bridge yet (decision 7).
 - Done: the section 15 snippet works end to end without the editor.
 
-### Step 10 - editor: canvas, nodes, connections. Recommended effort: HIGH
-- [ ] tkinter canvas widget: node drawing, ports, connections, dragging nodes, drawing connections from outlet to inlet (fan-in impossible, loops
-      refused by default), scroll-wheel zoom, Shift/Alt scroll, middle-drag pan, the right-click add-node list.
-- [ ] Tests with the headless stub approach where possible; a real-window check script that drives the widget with synthetic events.
-- Done when: the real-window check passes and the author has tried it.
+### Step 10 - editor: canvas, nodes, connections. Recommended effort: HIGH - DONE (build 13), except that the author has not yet tried it
+- [x] tkinter canvas widget: node drawing, ports, connections, dragging nodes, drawing connections from outlet to inlet (fan-in impossible, loops
+      refused by default), scroll-wheel zoom, Shift/Alt scroll, middle-drag pan, the right-click add-node list: `canopysynth/editor/`, see "Decisions
+      recorded at step 10".
+- [x] Tests: `tests/python/test_editor_geometry.py` (13 tests, no Tk), `tests/python/test_editor.py` (28 tests, a real off-screen window with synthetic
+      events: what is drawn and where, selection, zoom and the three kinds of panning, moving nodes, connecting from either end, the marking of ports
+      while a wire is dragged, every kind of refusal with its sentence, Escape, tooltips, the add menu and what choosing an entry does, messages, the lazy
+      import, the timers cancelled on destroy, the check script itself), a test of `Graph.can_connect` in `test_graph.py`, `dev/mutation/step10.py`.
+- [x] `dev/editor_check.py`: the real-window check (below).
+- [ ] **The author has tried it**: `python dev/editor_check.py` (a visible window driven by synthetic events, 17 checks), then `python dev/editor_check.py
+      --try` to use it by hand.
+- Verified (ran it): `python run_tests.py`: 377 passed, 0 failed (223 C tests, each run three times, plus 154 Python tests, 42 new). The check script ran
+  clean on the screen and off it. The mutation check, `dev/mutation/step10.py`: 121 deliberate faults (the geometry, the widget, `can_connect`), each followed
+  by the suite: all caught. The first run left 6 alive, all gaps in my tests, closed: a fit limited by the height (not the width), a replaced graph whose
+  node IDs do not clash with the old selection, the centring of a fit, the off-screen margin on the left and top, a wire snapping to a refused port, and
+  the destroy test, which could not see the failure because Tk swallows a failed timer unless a `bgerror` handler records it (it does now). The one
+  mutation of step 8 whose text moved with the `connect` refactor was re-pointed and its neighbours re-run: caught.
+  Looked at (a screenshot of the window beside the author's picture): the editor draws the nodes, diamonds, S-curves, the off-white built-in titles, the
+  cream and salmon bars and the selection outline in the style of the mock-up; I could not compare it more precisely than by eye.
+  Found on the way: a timer of the message line (and the idle redraw) was not cancelled when the editor was destroyed, so Tk printed `invalid command
+  name` after the window closed (fixed, with a regression test); a first benchmark of dragging measured nothing because its press landed on a connected
+  inlet, which the editor rightly will not drag from (redone at the node's centre).
+  Mistakes of mine, corrected: a first screenshot was blank (an off-screen window is not painted: shown on the screen briefly instead, so a window did
+  appear on the author's desktop for about a second a few times); my first test of the refusals was a muddle of `if False` pieces (rewritten); several
+  expected numbers were wrong by my arithmetic (a bounding box, a zoom-4 radius, a fit); an assertion of mine ended in `5 + 1 - 1`; and I ran `git stash`
+  by mistake at the end of a command: it stashed every tracked change, and I restored it with `git stash pop` within the same minute (nothing lost: the
+  author's last commit held the earlier steps, the three tracked files changed in this step came back as they were, and the test suite and anchors were
+  checked afterwards).
+- Believed, not verified: how it feels to use (the speed of a drag on the author's machine with a real graph; the size of the diamonds and wires against
+  the mock-up; whether the wheel behaves on a laptop touchpad, where Windows sends small deltas: the code scales by `delta / 120` so it should be smooth);
+  that Alt+wheel is not caught by Windows (an Alt press alone can activate a menu bar, and there is none); the right-click menu itself (tests invoke its
+  entries; a real pop-up waits for a click, so the author has to look at it).
+- Done: the check script passes; the author has still to try it.
+
 
 ### Step 11 - editor: knobs, widgets from data, node menus. Recommended effort: MEDIUM-HIGH
 - [ ] Knobs on inlets (gray when connected, double-click to type a value, raw -1..1 display); widgets drawn from the descriptors' data (button,
       text, choice, label); right-click node menu (delete, rename for boundary nodes, "internal sampling rate..." for nodes that have one);
       connection menu (delete); the loop-protection toggle.
+- From the author's mock-up (shown at step 10): each inlet has its knob in a pill-shaped holder to the left of the node, a round dial with a white tick;
+      the knobs of every inlet turn translucent while a wire is dragged (the mock-up shows one translucent, one opaque, to illustrate); a connected inlet
+      shows no knob in the mock-up (the design says grayed out: ask which). Third-party nodes show a title bar coloured by realtime safety (done at step 10).
 - Done when: every widget kind renders from data, and the menus do exactly what design section 13 lists.
 
 ### Step 12 - editor integration and live editing. Recommended effort: HIGH
@@ -822,7 +892,7 @@ the result) run under the lock; `canopy_audio_open` and `canopy_audio_close` run
 | 7 | done (build 8), listening check passed | miniaudio vendored (WASAPI + null backend); the audio device layer; the engine's own (service) instances and exclusive buttons; the `realtime_preview` node with exported calls for the editor; a throwaway-measured callback of 1 to 10 us; mutation-checked (142 faults); `dev/listen_check.py` for the author |
 | 8 | done (build 9) | the Python graph model (`Graph`, `Node`, `Port`), the node-type catalog with migrations by type version, the value checks, `to_dict` / `from_dict` of format `canopysynth-graph` version 1 pinned by a hand-written fixture; compiled-by-the-engine cross-checks; the C file node's absolute-path rule made exact; mutation-checked (139 faults, all caught; the 41 older file-node mutations re-run) |
 | 9 | done (build 10) | `Engine` and `Instance` (compile, update, boundary list and writes, point and span queries as a memoryview, errors per design section 16, lifetimes); one new C call (`canopy_instance_read_at_status`); mutation-checked (62 faults); GIL-free queries measured to run in parallel |
-| 10 | not started | |
+| 10 | done (build 13), the author's try-out open | `canopysynth/editor/` (geometry with no Tk, theme, the `Editor` Frame): nodes, ports, wires in the style of the author's mock-up, moving nodes, connecting from either end with allowed ports marked and refusals explained, zoom and the three kinds of panning, the add-node menu; `Graph.can_connect`; `dev/editor_check.py`; mutation-checked (121 faults); redraw cost measured |
 | 11 | not started | |
 | 12 | not started | |
 | 13 | not started | |

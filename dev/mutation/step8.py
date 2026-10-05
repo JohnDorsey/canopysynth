@@ -89,7 +89,7 @@ MUTATIONS = [
     ("G31 connect takes anything as a port", G, '        if not isinstance(port, Port):', '        if False:'),
     ("G32 connect takes an inlet for an outlet", G, '        if port.kind != kind:', '        if False:'),
     ("G33 connect takes a port of another graph", G, '        if port.node._graph is not self:', '        if False:'),
-    ("G34 fan-in is allowed", G, '        if target in self._links:\n            source, key = self._links[target]', '        if False:\n            source, key = self._links[target]'),
+    ("G34 fan-in is allowed", G, '        if source_ref is not None:\n            source, key = source_ref', '        if False:\n            source, key = source_ref'),
     ("G35 loops are refused even when protection is off", G, '        if self._loop_protection and self._reaches(inlet.node._id, outlet.node._id):', '        if self._reaches(inlet.node._id, outlet.node._id):'),
     ("G36 loops are never refused", G, '        if self._loop_protection and self._reaches(inlet.node._id, outlet.node._id):', '        if False:'),
     ("G37 the loop check looks the wrong way", G, 'self._reaches(inlet.node._id, outlet.node._id):', 'self._reaches(outlet.node._id, inlet.node._id):'),

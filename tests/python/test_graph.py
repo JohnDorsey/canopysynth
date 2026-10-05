@@ -415,6 +415,45 @@ def test_py_loop_detection_agrees_with_a_transitive_closure_on_random_graphs():
         assert len(graph.connections()) == len(edges)
 
 
+def test_py_can_connect_says_exactly_what_connect_would_do_with_the_same_words_and_never_raises():
+    rng = random.Random(10)
+    asked = refused_loop = refused_fan_in = 0
+    for round_number in range(40):
+        graph = new()
+        graph.loop_protection = round_number % 4 != 0
+        for _ in range(rng.randint(2, 6)):
+            graph.add("test_filter")
+        for _ in range(60):
+            nodes = graph.nodes()
+            source, target = rng.choice(nodes), rng.choice(nodes)
+            outlet, inlet = source.outlet("out"), target.inlet(rng.choice(["in", "coef"]))
+            reason = graph.can_connect(outlet, inlet)
+            clone = Graph.from_dict(graph.to_dict(), types=CATALOG)               # try it on a copy
+            try:
+                clone.connect(clone.node(source.id).outlet("out"), clone.node(target.id).inlet(inlet.key))
+                assert reason is None, reason
+            except GraphError as error:
+                assert reason == str(error), (reason, str(error))
+                refused_loop += "loop" in reason
+                refused_fan_in += "already connected" in reason
+            asked += 1
+            if reason is None:
+                graph.connect(outlet, inlet)
+        assert not graph.loop_protection or not graph.has_loop()
+    assert asked == 2400 and refused_loop > 50 and refused_fan_in > 100              # (the random graphs do reach both kinds of refusal)
+    graph, foreign = new(), new()
+    a, b, z = graph.add("py.mixer"), graph.add("py.mixer"), foreign.add("py.mixer")
+    for first, second in ((b.inlet("a"), a.outlet("out")), (a.outlet("out"), b.outlet("aux")), (a.outlet("out"), z.inlet("a")), ("out", "a"), (None, None),
+                          (a.outlet("out"), 5)):
+        reason = graph.can_connect(first, second)
+        assert isinstance(reason, str) and reason
+        refuses(lambda: graph.connect(first, second), reason[:30])                  # connect refuses with the same sentence
+    assert graph.can_connect(a.outlet("out"), b.inlet("a")) is None
+    dead = b.inlet("a")
+    graph.remove(b)
+    assert "does not belong" in graph.can_connect(a.outlet("out"), dead)                  # a port of a removed node is not this graph's any more
+
+
 # ---------------------------------------------------------------- boundary nodes
 
 def test_py_boundary_nodes_are_listed_by_name_in_byte_order_with_their_kind_and_id():

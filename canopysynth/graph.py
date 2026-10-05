@@ -268,16 +268,33 @@ class Graph:
         connection (GraphError if it has one already). While `loop_protection` is on, a connection that would close a loop is refused."""
         self._own_port(outlet, "outlet", "outlet")
         self._own_port(inlet, "inlet", "inlet")
-        target = (inlet.node._id, inlet.key)
-        if target in self._links:
-            source, key = self._links[target]
-            raise GraphError(f"{inlet.node._where()}: inlet {inlet.key!r} is already connected (to outlet {key!r} of node {source}); "
-                             "an inlet takes one connection")
-        if self._loop_protection and self._reaches(inlet.node._id, outlet.node._id):
-            raise GraphError(f"this connection would close a loop (node {inlet.node._id} already leads to node {outlet.node._id}); "
-                             "turn loop_protection off to allow loops")
-        self._links[target] = (outlet.node._id, outlet.key)
+        reason = self._refusal(outlet, inlet)
+        if reason is not None:
+            raise GraphError(reason)
+        self._links[(inlet.node._id, inlet.key)] = (outlet.node._id, outlet.key)
         return Connection(outlet, inlet)
+
+    def _refusal(self, outlet, inlet):
+        """Why `connect` would refuse these two ports of this graph (the sentence of the GraphError), or None if it would not."""
+        source_ref = self._links.get((inlet.node._id, inlet.key))
+        if source_ref is not None:
+            source, key = source_ref
+            return (f"{inlet.node._where()}: inlet {inlet.key!r} is already connected (to outlet {key!r} of node {source}); "
+                    "an inlet takes one connection")
+        if self._loop_protection and self._reaches(inlet.node._id, outlet.node._id):
+            return (f"this connection would close a loop (node {inlet.node._id} already leads to node {outlet.node._id}); "
+                    "turn loop_protection off to allow loops")
+        return None
+
+    def can_connect(self, outlet, inlet):
+        """None if `connect(outlet, inlet)` would succeed, else the reason it would refuse, as a sentence (never raises: ports that are not an outlet
+        and an inlet of this graph are refused with the sentence `connect` would raise). An editor uses it to show which inlets a wire may go to."""
+        try:
+            self._own_port(outlet, "outlet", "outlet")
+            self._own_port(inlet, "inlet", "inlet")
+        except GraphError as error:
+            return str(error)
+        return self._refusal(outlet, inlet)
 
     def disconnect(self, outlet, inlet):
         """Removes the connection between this outlet and this inlet; GraphError if there is none."""
