@@ -227,6 +227,24 @@ def test_py_a_failing_c_run_with_fail_fast_starts_no_python_test_and_says_so_and
         assert f"{5 + len(expected)} passed, {c_failures} failed, {5 + len(expected) + c_failures} total" in output.getvalue()
 
 
+def test_py_the_c_test_program_runs_only_the_tests_whose_names_hold_a_piece_the_environment_variable_lists():
+    program = os.path.join(ROOT, "build", "run_c_tests.exe")
+
+    def run_with(pieces):
+        environment = dict(os.environ)
+        environment["CANOPY_C_TESTS"] = pieces
+        result = subprocess.run([program], capture_output=True, text=True, env=environment, timeout=120)
+        names = re.findall(r"^  (?:PASS|FAIL)  (test_c_\w+)", result.stdout, re.M)
+        counts = re.search(r"(\d+) passed, (\d+) failed", result.stdout)
+        return names, tuple(int(group) for group in counts.groups()), result.returncode
+    one = "test_c_a_span_with_a_bad_n_touches_nothing_and_a_null_buffer_is_refused_for_every_kind_of_source"
+    assert run_with("a_span_with_a_bad_n_touches_nothing") == ([one], (1, 0), 0)               # a piece of a name picks the test
+    names, counts, _ = run_with("a_span_with_a_bad_n;preview_callback_writes_exactly")         # several pieces, separated by semicolons
+    assert len(names) == 2 and one in names and counts == (2, 0)
+    assert run_with("no test has this in its name") == ([], (0, 0), 0)                           # nothing picked: nothing runs, and that is not a failure
+    assert run_with(";;a_span_with_a_bad_n;") == ([one], (1, 0), 0)                             # empty pieces pick nothing (an empty piece would match every name)
+
+
 # ---------------------------------------------------------------- the mutation runner
 
 def test_py_the_mutation_runner_rebuilds_with_the_build_script_and_stops_if_that_fails():
@@ -289,11 +307,11 @@ SOURCES = {"src/engine.c": b"int x = 1;\r\nint y = 2;\r\n", "pkg/one.py": b"A = 
 GREEN = ("SURVIVED", [], "  PASS  test_py_x\n\n1 passed, 0 failed, 1 total\n")
 
 
-def mutation_campaign(arguments, final_fails=False):
-    """Runs the mutation runner's main on SPEC over SOURCES in a throwaway folder, with every run of the suite and every rebuild replaced by a stub that notes
-    what was asked and which files were changed at that moment (and, if `final_fails`, answers the run after the files are restored with a failure); returns
-    (the notes, the exit code, what was printed, the folder's files as bytes, the path of the times file the first run was asked to write, and whether it was
-    gone afterwards)."""
+def mutation_campaign(arguments, final_fails=False, spec_text=None, options=None):
+    """Runs the mutation runner's main on SPEC (or `spec_text`) over SOURCES in a throwaway folder, with every run of the suite and every rebuild replaced by a
+    stub that notes what was asked and which files were changed at that moment (and, if `final_fails`, answers the run after the files are restored with a
+    failure); returns (the notes, the exit code, what was printed, the folder's files as bytes, the path of the times file the first run was asked to write,
+    and whether it was gone afterwards). If `options` is a list, the (extra arguments, environment) of every run are appended to it."""
     mutate = load(os.path.join(ROOT, "dev", "mutation", "mutate.py"), "mutate_under_test")
     folder = tempfile.mkdtemp()
     try:
@@ -303,7 +321,7 @@ def mutation_campaign(arguments, final_fails=False):
                 handle.write(data)
         spec = os.path.join(folder, "spec.py")
         with open(spec, "w") as handle:
-            handle.write(SPEC)
+            handle.write(spec_text or SPEC)
         notes, times_paths = [], []
         verdicts = {b"x = 99": ("caught", ["test_c_a"]), b"A = 99": ("SURVIVED", []), b"C = 99": ("caught", ["test_py_b"]),
                     b"y = 99": ("BUILD FAILED", []), b"B = 99": ("caught", ["test_py_c"]), b"X = 99": ("caught", ["test_py_d"])}
@@ -312,9 +330,11 @@ def mutation_campaign(arguments, final_fails=False):
         def changed():
             return sorted(relative for relative, data in SOURCES.items() if open(os.path.join(folder, relative), "rb").read() != data)
 
-        def stub_run_suite(python_only=False, areas=None, times=None, record=None):
+        def stub_run_suite(python_only=False, areas=None, times=None, record=None, extra=(), env=None):
             now = changed()
             notes.append(("run", python_only, areas, times is not None, record is not None, now))
+            if options is not None:
+                options.append((list(extra), env))
             for path in (times, record):
                 if path is not None:
                     assert os.path.exists(path), "the times file must exist while the campaign runs"
@@ -363,6 +383,28 @@ def test_py_the_mutation_runner_checks_the_fast_order_before_mutating_rebuilds_b
     assert after == SOURCES                                                           # every file is back byte for byte (the CRLF endings too)
     assert code == 1 and "P1 second, a Python file: SURVIVED" in printed and "C2 fourth, a C file again: BUILD FAILED" in printed
     assert "S1 not there: SKIPPED" in printed and "summary: 4 caught, 1 SURVIVED, 1 BUILD FAILED, 1 SKIPPED" in printed
+
+
+def test_py_a_focused_spec_s_args_and_env_reach_the_runs_before_and_during_the_campaign_but_not_the_last_whole_suite_run_and_a_plain_spec_adds_nothing():
+    mutate = load(os.path.join(ROOT, "dev", "mutation", "mutate.py"), "mutate_under_test")
+    asked = []
+
+    def stub(command, **options):
+        asked.append((command, options.get("env")))
+        return types.SimpleNamespace(stdout="  PASS  test_py_x\n\n1 passed, 0 failed, 1 total\n", stderr="")
+    with mock.patch.object(mutate.subprocess, "run", stub):
+        mutate.run_suite(extra=["-k", "zz"], env={"CANOPY_C_TESTS": "overrun;preview"})
+        mutate.run_suite(python_only=True, times="T.json", extra=["-k", "zz"])
+        mutate.run_suite()
+    assert asked[0][0] == [sys.executable, "run_tests.py", "-k", "zz"]                         # the extra arguments come last
+    assert asked[0][1]["CANOPY_C_TESTS"] == "overrun;preview" and asked[0][1]["PATH"] == os.environ["PATH"]   # the environment is the run's own with these added
+    assert asked[1] == ([sys.executable, "run_tests.py", "--no-build", "--no-c", "--fail-fast", "--order-by-times", "T.json", "-k", "zz"], None)
+    assert asked[2] == ([sys.executable, "run_tests.py"], None)                                  # a plain run is as it was
+    focused = 'ARGS = ["-k", "zz"]\nENV = {"CANOPY_C_TESTS": "overrun"}\n' + SPEC
+    for text, wanted in ((None, ([], None)), (focused, (["-k", "zz"], {"CANOPY_C_TESTS": "overrun"}))):
+        log = []
+        mutation_campaign(["C1", "P2"], spec_text=text, options=log)
+        assert log[:-1] == [wanted] * (len(log) - 1) and log[-1] == ([], None), (text, log)    # every run but the last; the last is the whole suite
 
 
 def test_py_with_thorough_the_mutation_runner_asks_for_every_run_the_old_way_and_a_name_list_picks_the_mutations_to_run():

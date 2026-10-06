@@ -346,3 +346,45 @@ def test_py_a_graph_knows_its_open_engines_only_and_does_not_keep_them_alive():
     except Exception:                                                                       # noqa: BLE001 - whatever a bad registry raises: nothing is registered
         pass
     assert graph.engines() == []
+
+
+def test_py_a_node_id_that_is_not_a_whole_number_in_64_bits_or_an_action_that_is_not_text_is_a_graph_error_and_presses_no_button():
+    """Found by the API fuzz of step 13 (tests/python/test_api_fuzz.py): the calls added at step 12 passed their arguments straight to ctypes, so a node ID
+    that was not an int was a ctypes.ArgumentError, an action that was not text was an AttributeError, and a node ID beyond 64 bits was cut to its low
+    64 bits (ctypes does not check) and pressed the button of whichever node had that number."""
+    graph = Graph()
+    preview = graph.add("realtime_preview")
+    with Engine(graph) as engine:
+        engine.set_audio_backend("null")
+        calls = {"action": lambda node_id: engine.action(node_id, "play"), "node_message": engine.node_message, "preview_state": engine.preview_state,
+                 "preview_set_time": lambda node_id: engine.preview_set_time(node_id, 5 * MS), "preview_warning": engine.preview_warning}
+        wrapped = [preview.id + 2 ** 64, preview.id - 2 ** 64, 2 ** 63, -2 ** 63 - 1, 10 ** 40]
+        for name, call in calls.items():
+            for bad in ("1", None, 1.0, True, [1], b"1", object(), preview.id + 0.0, *wrapped):
+                try:
+                    call(bad)
+                except GraphError as error:
+                    assert "node ID" in str(error) and "64 bits" in str(error), (name, bad, str(error))
+                else:
+                    raise AssertionError(f"{name}({bad!r}) must raise GraphError")
+        assert engine.preview_state(preview.id) == (False, 0)                              # no refused call played it, or moved its time
+        for bad in (None, 5, 1.5, True, b"play", ["play"], "pl\0ay", "\ud800", object()):
+            try:
+                engine.action(preview.id, bad)
+            except GraphError as error:
+                assert "the name of an action" in str(error), (bad, str(error))
+            else:
+                raise AssertionError(f"an action {bad!r} must raise GraphError")
+        assert engine.preview_state(preview.id) == (False, 0)
+        engine.action(preview.id, "play")                                                  # the good call still works...
+        assert wait_until(lambda: engine.preview_state(preview.id)[0])
+        engine.action(preview.id, "nonsense")                                              # ...and a name the node does not know is still ignored
+        engine.action(preview.id, "pause")
+    for call in (lambda: engine.action("not an id", 5), lambda: engine.node_message(None), lambda: engine.preview_state([]),
+                 lambda: engine.preview_set_time(None, None), lambda: engine.preview_warning(2 ** 70)):
+        try:
+            call()
+        except RuntimeError as error:                                                       # a closed engine is reported first, whatever else is wrong
+            assert "closed" in str(error)
+        else:
+            raise AssertionError("a closed engine must raise RuntimeError")

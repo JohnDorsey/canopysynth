@@ -23,9 +23,14 @@ int ctest_heap_ok(void);
 /* The name of the test that is running: if the program crashes, the handler in run_c_tests.c says which test it was. */
 extern const char *ctest_current_name;
 
-#define RUN(fn) do { ctest_current_failed = 0; ctest_current_name = #fn; fn(); \
+/* 1 if the test of this name is to run: always, unless the environment variable CANOPY_C_TESTS holds text, a list of pieces of names separated by
+   semicolons, in which case only the tests whose name contains one of them run (for trying one test, or a few, by themselves; the mutation check
+   uses it to see what a new test catches on its own). A test that is left out is not counted. */
+int ctest_selected(const char *name);
+
+#define RUN(fn) do { if (ctest_selected(#fn)) { ctest_current_failed = 0; ctest_current_name = #fn; fn(); \
     if (ctest_current_failed) { ctest_failed++; printf("  FAIL  %s\n", #fn); } \
     else { ctest_passed++; printf("  PASS  %s\n", #fn); } \
-    fflush(stdout); } while (0)
+    fflush(stdout); } } while (0)
 
 #endif

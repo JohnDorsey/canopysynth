@@ -1,7 +1,7 @@
 # CANOPY - build plan for version 1
 
-Created 2026-10-02. Status: **in progress** (steps 0 to 12 done; build 17 made the changes the author asked for after trying step 12 with a real device; step 13 is next; he tried a bad file too (an error message under the node, nothing unusual); the author's
-try-out of the step 10 editor and his listening check of step 7 passed).
+Created 2026-10-02. Status: **in progress** (steps 0 to 13 done; step 14, documentation and packaging, is next; build 18 is step 13, the whole-system verification, and one bug it found in the Python bridge; build 17 made the changes the author asked for
+after trying step 12 with a real device and a bad file; the author's try-out of the step 10 editor and his listening check of step 7 passed).
 The design is `docs/canopy_design.md` (read it before every step). This plan builds exactly that design and nothing else.
 The project folder is `C:\Users\Argh\Documents\ai\projects\canopysynth`; the design and this plan live in its `docs\` folder.
 
@@ -557,6 +557,144 @@ in fast mode: 76 caught, 956 s. A campaign still pays two whole-suite runs (abou
 **Believed, not verified:** that the saving for the other C specs is about that of the sample (only eight faults of `step3.py` were run both ways); the fast run names only the first failing
 test (`--thorough` shows every one that fails).
 
+## Step 13: what was verified and measured (build 18; the author may veto any choice marked "mine")
+
+The step asked for determinism recordings, a multi-thread stress, error behaviours, C-level checks for overruns and timing measurements, and "report what was measured". Everything
+below was RUN unless it says "believed". The machine: AMD Ryzen 5 7600X, 6 cores / 12 logical processors, Windows 10, Python 3.11.9, MSVC 2022; the timings are for it and say how a cost
+grows, not what another machine does. The raw output of the measurements is in `docs/step13_measurements.txt`.
+
+### What was found (the product, not the tests)
+
+1. **One bug, in the Python bridge, found by the fuzz of the public API (`test_api_fuzz.py`) and fixed.** The five calls added at step 12 (`Engine.action`, `node_message`,
+   `preview_state`, `preview_set_time`, `preview_warning`) passed their node ID straight to ctypes and `action` called `.encode` on its argument: a node ID that was not an int was a
+   `ctypes.ArgumentError`, an action that was not text an `AttributeError`, and **a node ID beyond 64 bits was cut to its low 64 bits by ctypes without a word, so
+   `engine.action(2**64 + 5, "play")` pressed the button of node 5.** They now check as `set_knob` does: `GraphError` ("a node ID must be a whole number that fits in 64 bits", "the name
+   of an action must be text"), and a closed engine is reported first (`RuntimeError`). My choice: `GraphError`, as `Graph.node` and `Engine.set_knob` already say for a bad ID. Regression test:
+   `test_engine_controls.py::test_py_a_node_id_that_is_not_a_whole_number_in_64_bits_or_an_action_that_is_not_text_is_a_graph_error_and_presses_no_button`; faults of the fix: `step13e.py`, 7 of 7 caught.
+2. **No other bug in the engine or the bridge.** 240000 random calls and 240000 damaged files (12 fresh seeds of 20000 each, after the fix; 151350 documented refusals of 26 kinds, 9169 files accepted and 230831 refused) raised no
+   undocumented exception, every graph the model accepted saved to the same text and compiled, and nothing leaked. The 63 exported C functions answered NULL and extreme arguments with the statuses the headers promise. 3.78 million
+   queries, 47540 installs and 462 million boundary writes in ten minutes of the C stress, and a quarter as much under AddressSanitizer, found no wrong answer, stall, leak or sanitizer report.
+3. **Properties of the design that I had not written down, found while making the oracles exact** (now in CLAUDE.md): an install writes the new knob positions BEFORE it publishes the graph, so a
+   query through an instance that has not adopted yet reads the new knobs with the old wiring; a node with only a point handler is asked for each sample in turn, so a span through it can change
+   between two samples while a writer runs. Both are what design section 5 says ("a query that is already running is not guaranteed to see a consistent snapshot"); nothing was changed.
+4. **Costs a host should know** (measured, below): `Graph.connect` costs O(connections) because of the search for a loop, so building a 3000-node graph takes 140 ms and 7.7 ms with
+   `loop_protection` off while building; an instance holds one scratch buffer of 65536 floats (256 KB) for every node of its deepest chain that holds one; freeing an instance costs a pass over the live ones (0.8 us with 250 alive, 5.3 us with 4000: no host keeps
+   so many); a chain deeper than about 2500 nodes
+   overflows a 1 MB stack (the host process dies), which no graph of the built-in nodes can reach (the longest chain there has two nodes), so it is for version 2 to decide (see "For the author").
+
+### The checks, what each one is, and what it can and cannot see
+
+| Check | Where | What it does | Verified by |
+|---|---|---|---|
+| Static analysis | `dev/analyze.ps1` | `cl /analyze` over every file of `src/`, output filtered | no warning of ours; a planted fault was reported (positive control) |
+| Overrun sweep | `tests/c/test_overrun.c` | 19 graph cases x 27 counts x 16 time shapes, every answer's status against an oracle of its own (unsigned arithmetic), canaries round every buffer, the preview's fill path; normal, debug heap and AddressSanitizer | `step13.py`: 20 faults, 20 caught (one only after the sweep was made to read the unconnected inlets too) |
+| WAV loader fuzz | `tests/c/test_wavfuzz.c` | 11 base files (every accepted format and channel count), 12 kinds of damage, fixed seeds, 100 files a run (`CANOPY_FUZZ_ITERATIONS`): refused with a message or played, never a crash, an overrun or a leak; the same decision in all three builds | `step13b.py`: 10 of 10 |
+| C stress | `tests/c/test_stress.c`, `tests/stress/stress_main.c` (`build.ps1 -Stress`) | see below | `step13c.py` (6) and `step13c2.py` (1) |
+| Python stress | `tests/python/stress_threads.py`, `dev/stress.py` | see below | the checks inside it; no mutation spec (its faults are the C ones) |
+| Determinism | `tests/c/test_determinism.c`, `tests/python/test_determinism.py` | see below | `step13d.py`: 7 of 7 |
+| API fuzz | `tests/python/test_api_fuzz.py` | 20000 random calls with garbage and good arguments on `Graph`, `Node`, `Engine`, `Instance` and the helpers, and 20000 saved graphs damaged in random places; only the documented exceptions | `step13e.py`: 7 of 7 |
+| C API sweep | `tests/python/test_c_api.py` | the DLL's export table (read from the PE file) equals the headers' declarations both ways, every ctypes declaration (the package's and the tests') has the header's argument widths, and every one of the 63 exports is called with NULL and extreme arguments (a test fails if one is never called) | `step13f.py`: 11 of 11 |
+| Process end and real memory limits | `tests/python/test_shutdown.py` (8 tests) | exit while the preview plays (open objects, daemon threads, a window never destroyed, `os._exit`, an exception, `SystemExit`); memory limited by a job object, in three child processes: a file too big for it is refused with a message on its node (the 160 MB file would need 320 MB of floats under a limit of 250), an install that cannot be made (the limit set 40 MB above what a 100000-node `Graph` holds; the compile needs about 110) is a `MemoryError` that leaves the old graph answering, and so is an instance that cannot be made (the limit 6 MB above); no leak in any | the tests themselves (each outcome is asserted) |
+
+**The C stress.** One engine; four writer threads (one per boundary inlet: the whole numbers 1, 2, 3... up to 2^20, publishing a counter before and after each write), readers (an instance
+each; the last sleeps 60 to 180 ms so that it adopts many graphs at once), a thread that makes, asks and frees instances over and over, an installer (a new graph every few ms; now and then
+one that cannot be compiled, which must change nothing; replaces the file of the file node and presses "open"; collects), a knob thread, an info thread (the boundary listing complete and in order,
+messages, the knob, the preview's state and warning) and a UI thread (Play, Pause, time, device; miniaudio's null backend, so an audio thread runs in the DLL), with a watchdog that stops the
+program after 20 s without progress. Every graph is a function of its serial number (wiring, a chain of 1 to 4 gains so that the scratch arena changes size, constants, the preview there or not,
+the checkpoint interval of the filter) and every value is exact in float32, so an answer can be checked without a lock: a reader notes which graph versions and which writes it may have come
+from; the filter must give bit for bit what a quiet engine gave before the stress began, whatever interval the graph of the moment sets; a span of a node with a span handler must be constant, and
+one file or the other, never a mixture; at the end every instance and the engine are freed and no block is left. In the suite it is one test of 2.5 s (all three C programs); the stand-alone
+program runs as long as asked. **Soak, run:** normal build 600 s, seed 7: 3784569 checked queries (3136573 spans, 647996 points), 47540 installs (+3657 refused), 9508 file replacements, 462 million
+boundary writes, 136080 knob writes, 49792 instances made and freed, 22361 preview actions (the preview found playing 18321 times), the widest window of graph versions one answer could come from 11, no problem;
+AddressSanitizer build 300 s, seed 8: 251489 queries, 23001 installs, 210 million boundary writes, window 29, no problem and no sanitizer report; debug-heap build 20 s: no problem.
+**Its power:** `step13c.py` (faults only a thread can show): T01 reclaim frees graphs an instance still runs, T02 reap frees a package's payload before its instance applied it, T05 freeing an instance
+leaves it on the retired blocks' wait lists (three crashes of the C program), T03 queries do not make their epoch odd, T06 an instance applies only one waiting package: 5 of 6 caught by the 2.5 s test.
+T04 (collecting retired blocks does not wait for the queries that read them) is not found in 2.5 s: its window is a query still reading a block retired milliseconds before; the deterministic tests of
+retiring hold a query inside the node and find it: caught by `test_c_replaced_data_stays_until_the_query_that_may_be_reading_it_is_over` (`step13c2.py`). **My own mistakes while making the oracle exact** (first run: 12 "problems" in 10 seconds): I had assumed one version of wiring and knobs
+per answer, and a span through a point-only node constant; both wrong, the engine right (see finding 3); the oracle now allows exactly what the design allows. A statistical test cannot see a window of
+nanoseconds (a boundary write without the shared lock, say): that is what the C tests that hold the lock themselves are for.
+
+**The Python stress.** The main thread runs a Tk window (off-screen) with an Editor and an Engine and makes random edits through the editor (the `random_edit_run` that `test_editor_link.py` already used, now
+a function, with all its checks after every edit: no compile fails, each edit that changes the graph compiles it once, the engine's boundary nodes are the editor's, what it gives is what the picture
+says), presses the preview's buttons, replaces the file and presses "open"; other threads write inlet "w" (1, 2, 3...), read outlet "r" through instances of their own (a value from the window of writes completed
+before and started before; a span constant; never going back: **an install must never reset a boundary value**), read the file's outlet (0.25 or 0.75, never a mixture) and ask the engine what it holds.
+In the suite 3 s (about 450 edits and 10000 queries); `python dev/stress.py 60` for longer. **Found on the way (mine):** with threads spinning in Python loops the main thread's Tk calls starve (every Tk call lets go of the GIL
+and waits half a millisecond to five to take it back: one redraw took minutes), so the threads wait a fraction of a millisecond between calls, as a host's workers do; flat-out hammering is the C stress's job, which has no GIL.
+
+**Determinism.** Design section 5: the same graph, knobs, boundary values, settings and files give the same floats every time; section 12: "recorded-output tests made possible by the determinism rule".
+`test_determinism.c` records twelve whole graphs (a saw, a chain of gains with a boundary value, two pointwise nodes, a lookahead, time as a float, knobs only, the filter with a long memory at 8 kHz and with its defaults,
+a 16-bit stereo 44.1 kHz file, the file through a filter, +infinity, minus zero and a NaN with a payload through boundary nodes, a fan-out) and asks each 9 shapes of query for each outlet (forward, reversed, before 0, all samples at
+one time, the biggest span, points, far from the start); the FNV-1a hashes of the answers are a table in the file and **the three C programs (optimised, debug, AddressSanitizer) all match it: the optimiser and the
+instrumentation change not one bit** (CANOPY_RECORD=1 prints a new table after a deliberate change). The same file checks that the pointwise graphs answer what independent formulas say (so the recordings are right, not only
+stable, and none is silence), and the properties: asked again, in reverse by a cold instance, and by three other threads; 130 random queries of a long-lived instance against fresh instances for the three filter graphs; the same
+description installed again, a changed checkpoint interval, an unrelated node, with the answers unchanged; and every sample of a span equal to the point query at its time. `test_determinism.py` asks the public Python API
+(`Graph`, `Engine`, `Instance`) the same questions of the same file and gets the hash the C table records, and checks a saved-and-loaded copy, another engine, an update and three threads. **Gap found and closed (mine):**
+fault E05 (checkpoints made under other settings are kept) survived: with a coefficient of 0.3 the filter forgets within a few samples, so stale checkpoints gave the same bits; the recorded filters now have
+long memories (a pole at 0.9995) and E05 is caught. The recordings are of this machine's compiler; another compiler or platform may differ in the last bit of a node's arithmetic and then they must be recorded again, knowingly.
+`canopy_sample_time` is built from the same plan code the nodes use, so the span-equals-points test and the formulas share the library's sample times; where the samples are is checked against Python big integers in `test_time.py` and `test_engine.py`.
+
+**Error behaviours, against the design.** Section 5 (n out of range, overflow of t1 - t0, t1 < t0, t1 == t0, the knob for a missing connection): `test_overrun.c`, `test_time.py`, `test_engine.py`, `test_bridge.py`.
+Section 9 (a missing device falls back, a warning for nodes that are not realtime safe): `test_preview.py`, `test_engine_controls.py`. Section 10 (unique names, any float accepted, unknown names, the wrong kind): `test_boundary.py`,
+`test_bridge.py`, and the determinism recordings of +infinity, minus zero and a NaN. Section 14 (an unknown type rejects the whole file, a missing WAV is no error, no relative paths): `test_graph.py`, `test_api_fuzz.py` (damaged files). Section 15 and 16
+(`GraphError`, `BoundaryError`, `QueryError`, with which status): `test_bridge.py`, `test_api_fuzz.py` (nothing else is raised), `test_c_api.py` (the statuses of every export). Section 16 (a bad WAV when pressing "open" keeps the old file and shows the
+message): `test_fileread.py`, `test_wavfuzz.c`, and the author's own try-out of a bad file.
+
+**Older checks, run again because this step changed what they judge or what they mutate.** `step12.py` (112 faults) and `step12b.py` (26): `test_editor_link.py`'s random run became a function and `engine.py` changed; all caught, the restored suite green.
+`step9.py` (76; it mutates `engine.py`, C and the bindings): all caught, restored suite green. Six faults whose text had changed were SKIPPED by the runner, as it says it will (and exits 1): `runner.py` M30, M31, M33 (`mutate.py` had gained its
+`ENV` and `ARGS` options after that spec was last run) and `step12.py` E18, E24, E25 (the five `Engine` calls of this step's fix); re-pointed, and caught. Every anchor of every spec file was checked to occur exactly once in its file. Not re-run: `step3.py` to
+`step8.py`, `step10.py`, `step11.py` and `step11b.py`, whose code and tests this step only added to (believed to give the same verdicts; the whole suite, which they are judged by, passes).
+
+### Measurements (best of several runs where the machine disturbed one; the slowest of four runs of the same row was up to 2.7 times the best)
+
+| What | Result |
+|---|---|
+| A boundary value, point query / span of 480 / of 65536 | 12.6 ns / 28 ns / 1.6 us |
+| One gain (span handlers): span of 480 / of 65536 | 77 ns (0.16 ns per sample) / 6.9 us |
+| A chain of 8 gains: point / span of 480 / of 65536 | 89 ns / 427 ns (0.89 ns per sample) / 49.7 us |
+| A chain of 64 gains: point / span of 480 / of 65536 | 0.92 us / 3.7 us (7.7 ns per sample) / 392 us |
+| Nodes with a point handler only (saw + const -> sum), per sample | 12.5 ns |
+| The file node, per sample, at any density (480 samples over 2.5, 10 and 40 ms), and a span of 65536 | 4.4 ns, 285 us |
+| The hidden filter playing on / a cold read at t = 2 s | 20.6 ns per sample / 1.1 ms (it recomputes from its last checkpoint) |
+| Threads, spans of 480 and of 4800 through a chain of 8 gains (6 cores, 12 logical processors; each thread its own instance) | 2 threads 1.9 to 2.2x, 4: 3.0 to 3.35x, 6: 4.0 to 4.4x, 8: 4.3 to 5.4x, 12: 5.1 to 6.0x one thread (no lock is taken by a query) |
+| Installing a graph of 3000 nodes / 30000 nodes (first / again with every knob moved and 8 instances) | 2.4 to 3.6 ms / 29 to 33 ms; 1.9 to 2.6 ms / 21 to 23 ms |
+| An instance adopting it, at its next query | 3 us / 22 us |
+| Memory of a graph | 1.3 kB per node (3000 nodes 3.95 MB in 49012 blocks; 30000 nodes 38.4 MB) |
+| Memory of an instance | 0.25 to 0.3 MB for a graph with one gain: a scratch arena of 256 KB (65536 floats) for each node of the deepest chain that holds a scratch buffer (canopy_instance_arena_floats): 2 MB for a chain of 8 gains, 16 MB for 64, 128 MB for 512; nothing for a graph of the built-in nodes, none of which holds one |
+| Calls while another thread installs a 3000-node graph again and again (1.4 ms each, p99 2.4 ms, max 2.6 ms) | boundary write: mean 0.16 to 0.19 us (0.08 with no installing), p99.9 0.5 to 0.64 us, max 0.64 to 0.79 ms; knob write the same; a span of 480: p99.9 0.7 us, max 0.2 to 0.94 ms; without installing the maximum was 0.2 to 1.2 ms: a hiccup of up to a millisecond belongs to the machine, and installing adds none I can see |
+| The preview's callbacks (null backend, polled every 0.2 ms for 6 s) | the position moves every 19.9 to 20.0 ms on average, p99 33.5 ms, max 32.1 to 32.5 ms, identical when 300-node or 3000-node graphs are installed again and again |
+| A WAV file of 100 MB (594 s of 16-bit stereo audio): first load / "open" again / memory | 97 to 100 ms (about 1 GB/s) / 100 ms / 200 MB (float32 of both channels: twice the file), the old data freed at once; a span of 480 then costs 2.2 us as for a small file |
+| A chain of gains asked from the main thread, a worker thread and the preview's audio thread | 2500 answered by all three, 3000 overflows the 1 MB stack after a good install (about 350 to 420 bytes a level); the host dies |
+| Python: `Instance.value` / `audio` of 480 / of 65536 / `Engine.set_boundary` | 0.98 us / 2.4 us / 140 us / 0.70 us |
+| Python threads: spans of 4800 (3 us each) / spans of 65536 of a file (400 us each) | 0.88x one thread with 2 to 8 threads (the GIL, held by the Python part of a call) / 2.3x, 4.3x and 6.0x with 2, 4 and 8 threads (the C part lets it go) |
+| Python: build a graph of 1000 / 3000 nodes, loop protection on / off while building | 14 ms / 140 ms; 2.6 ms / 7.7 ms |
+| Python: `Engine(graph)`, `update()`, `to_dict`, `from_dict` for 3000 nodes | 11.6 ms, 11.1 ms, 3 to 5 ms, 12.5 ms |
+| The editor (off-screen window): a full redraw for 10, 50, 200, 500 nodes / an edit that recompiles | 5.1, 11.6, 34, 47 ms / 5.5, 12, 36, 50 ms (the redraw is nearly all of it); the timer's poll 0.001 to 0.034 ms |
+| The real audio device (the default one, silence): Play the first time / later presses / closing the engine | 29 and 44 ms (two runs), during which a boundary write waited as long (the exclusive lock, deferred idea D1) / 0 ms / 52 and 55 ms |
+
+**D1 (the plan's deferred idea, to be checked at steps 12 and 13):** the trigger was "a real driver where a press takes hundreds of ms or hangs, or a host that cannot tolerate a one-to-four-frame hitch". Measured on this machine's
+default device, twice: 29 and 44 ms for the first Play, 52 and 55 ms to close, nothing for the other presses. Not reached; D1 stays deferred.
+
+### What I did not do, and what I believe without having run it
+
+- Not run: a real-device stress (only the silent button measurement above); other devices; a device unplugged during play; other machines, other compilers, Python older than 3.11 (the package says 3.9 or newer; only 3.11 was run);
+  the editor under a person's hands for hours (the tests drive real Tk windows with synthetic events).
+- Believed, not verified: that a thread scaling table taken on a 6-core machine says anything about a 2-core one; that the soak would find a bug whose window is a handful of instructions (the stress found five of six faults of its kind in
+  2.5 s and the sixth only by another test: statistics, not proof); that the stack per level of a deep chain is the same for another node type (it was measured with the gain).
+- A figure in the measurements that I do not understand: the maximum of a query or a write is 0.2 to 1.2 ms in every run, with or without installs; I did not find what causes it (scheduling, interrupts, the allocator of the process).
+- Mistakes of mine on the way, all caught by checking my own work: the first scaling table showed a collapse at 6 threads that was false sharing in my benchmark's own counters (padded, and four runs agree now); the first timings of two files
+  differed by up to 2.7 times between runs (the machine; best of four is reported); a benchmark preview node and a chain shared an ID; the first version of the real-memory test ran out of memory inside Python while building the Graph, not in the engine, so it proved less than it said (a second test now limits the memory after the Graph is built), and it made a million instances, which takes hours to free one by one: it hung, the runner's timer ended the test and left its child process spinning (found by its start time), and it is the likeliest cause of the one failure of a campaign's restored suite that I could not reproduce afterwards, in three suites run at once (508 passed in each: believed, not verified); the machine went to sleep for six hours during one of my waits, which made two campaigns and a run of the C programs report themselves stuck (found by the clock; the keep-awake request in CLAUDE.md is for this); the first fuzz harness called methods on garbage receivers and put shared garbage into the data it then changed
+  (a cycle); `quick` compile scripts that died on a stderr line ran the previous binary, which I noticed only because the results did not change.
+
+### For the author (nothing needs doing; these are the places where I would like a decision, or a veto)
+
+1. **A deep chain kills the host.** The engine refuses nothing about depth, so a chain of more than about 2500 processing nodes overflows the stack in a query. Version 1 cannot build one, so this is for the version that adds
+   processing nodes: the install could count the depth (the compile already finds the deepest chain to size the arena) and refuse a graph that is too deep with `CANOPY_ERR_GRAPH`, which would change design section 8 ("the engine does nothing about
+   loops") only for depth, not for loops. Not done: the design is final.
+2. **`Graph.connect` is O(connections).** Fine for anything drawn by hand (a few hundred wires); a program that generates thousands should turn `loop_protection` off while it builds. An incremental adjacency map would make it O(1) per call;
+   not done, because nobody builds such graphs yet. Say if you want it.
+3. **The suite is slower by about 130 seconds: it takes 209 s on a quiet machine, build included (about 80 s at build 17); the C programs alone are 17 s, 52 s under the debug heap and 72 s under AddressSanitizer, the Python tests 54 s** (the C tests run three times: the determinism tests are 8, 29 and 48 s of that, the stress 3 x 2.5 s; the Python shutdown and real-memory tests 3 s, the Python stress 4 s). The determinism tests are the heavy ones and could be cut to the cheaper graphs;
+   the mutation campaigns pay it only in their whole-suite runs and for a fault no test notices.
+
 ## Questions still to ask, and where
 
 (Answered at step 2: atomics = C11 stdatomic; no Python tier in version 1. Answered at step 4: how an instance adopts a new graph. Answered at step 7:
@@ -1038,10 +1176,11 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
       (`Editor._choice_menu` builds the menu from `WidgetBox.choices`).
 - Done when: editing during playback works with the null backend in a throwaway script, and the author confirms it with a real device.
 
-### Step 13 - whole-system verification. Recommended effort: MAX
-- [ ] Determinism recordings, a multi-thread stress script (instances + edits + boundary writes + the preview), error behaviours, the C-level
+### Step 13 - whole-system verification. Recommended effort: MAX - DONE (build 18)
+- [x] Determinism recordings, a multi-thread stress script (instances + edits + boundary writes + the preview), error behaviours, the C-level
       checks for overruns, timing measurements. Report what was measured.
-- Done when: all checks pass and the measurements are recorded here.
+      All five were made, each with a mutation spec of its own, and the measurements are in "Step 13: what was verified and measured" above and in `docs/step13_measurements.txt`.
+- Done when: all checks pass and the measurements are recorded here. **Met:** 508 tests pass (238 C tests, each also under the debug heap and AddressSanitizer, and 270 Python); one bug found and fixed.
 
 ### Step 14 - documentation and packaging. Recommended effort: MEDIUM-HIGH
 - [ ] Ask the packaging question. Write the user documentation (the public helper functions documented as such), a node-author guide for the
@@ -1070,6 +1209,7 @@ that hangs would hold the lock and freeze the calling thread. The idea: only the
 the result) run under the lock; `canopy_audio_open` and `canopy_audio_close` run outside it.
 - **Trigger:** a real driver (the author's, or another) where a press takes hundreds of ms or hangs; or a host that cannot tolerate a one-to-four
   frame hitch in a render thread's boundary writes when the user presses a preview button. Check at steps 12 and 13 (the editor with a real device).
+  **Checked at step 13** (the machine's default device, silence, two runs): the first Play took 29 and 44 ms and a boundary write waited as long for it, later presses took nothing, closing the device 52 and 55 ms. Trigger not reached.
 - **Protocol sketch:** a state per preview resource (CLOSED, OPENING, OPEN, CLOSING), a reference count and a `dying` flag. Open: under the lock
   validate, copy the device name, make buffers and instance, state OPENING, take a reference; outside the lock open the device; under the lock
   commit (or, if `dying` or superseded, discard what was made). Close: under the lock take the device pointer, state CLOSING; outside the lock join
@@ -1120,6 +1260,6 @@ the result) run under the lock; `canopy_audio_open` and `canopy_audio_close` run
 | 11 | done (build 14; amended at build 15), the author's try-out open | Build 15: no knob on a connected inlet (design section 6 reworded with the author's permission), rectangle selection and moving the selection together, `test_editor_selection.py`, `step11b.py` (39 faults), 421 tests green. Build 14: Knobs (pill, dial, drag, typed value, translucent while a wire is dragged), widgets drawn from data, node / inlet / wire / background menus, loop-protection switch, the author's three look changes; double clicks found by the editor itself after a flaky test; `test_editor_controls.py`; `dev/mutation/step11.py` (185 faults) and `step10.py` (113) all caught; 410 tests green |
 | 12 | done (build 16); the author's real-device try-out found two problems, fixed at build 17 (next row) | Compile and swap on every edit, live knobs, Play / Pause / device list / time field of the preview node, Open... of the file node with its name row, notes under nodes, Delete selected, `Graph.engines()`, `dev/editor_try.py`; 112 faults of `step12.py` and the older specs all caught; 450+ tests green |
 | 12b | done (build 17) | After the author's try-out of step 12: a new boundary node is named default0, default1, ... and the editor refuses an empty name or one another boundary node has (option C); the mutation runner made faster (stop at the first failure, no C tests after a change to a Python file, cheapest tests first: 8.8 times faster per fault on the editor specs, 2.2 times on C code) and corrected (a stale DLL after a C mutation, skipped mutations, the exit code, mutations of run_tests.py itself); `test_runner.py` (18), `step12b.py` (26), `runner.py` (75), `known.py` (4); 475 tests green; the older Python specs and `step9.py` run again, all caught after two test gaps were closed |
-| 13 | not started | |
+| 13 | done (build 18) | Determinism recordings (twelve whole graphs, hashes checked by the three C programs and by the Python API), the multi-thread stress in C (10 minutes: 3.78 million checked queries, 47540 installs, 462 million boundary writes, no problem; AddressSanitizer 5 minutes) and in Python (the editor making random edits while threads write and read), a fuzz of the public Python API (found and fixed: node IDs and action names of five `Engine` calls were not checked, and an ID beyond 64 bits pressed another node's button), a sweep of all 63 exported C functions with NULL and extreme arguments, the export table against the headers and the ctypes declarations, process end and real out-of-memory tests, overrun and WAV-fuzz tests, `cl /analyze`; 7 focused mutation specs (62 faults, all caught: 61 by the test written for them, T04 by the tests of retiring; three gaps in my tests were found and closed on the way); timings recorded; 508 tests green |
 | 14 | not started | |
 | 15 | not started | |

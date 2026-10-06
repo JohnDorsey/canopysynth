@@ -5,7 +5,11 @@
 #   build\run_c_tests_asan.exe   the same tests under AddressSanitizer (/fsanitize=address): out-of-bounds reads and writes, use after free,
 #                                with a report that names the line; built only when the "C++ AddressSanitizer" component is installed
 #   powershell -ExecutionPolicy Bypass -File build.ps1
+# With -Stress it builds, besides all that, the stand-alone stress program of plan step 13 (tests\stress\stress_main.c with tests\c\test_stress.c) in the
+# same three flavours: build\stress.exe, build\stress_debug.exe and build\stress_asan.exe (see the head of tests\stress\stress_main.c for how to run them).
+# With -Bench it builds build\bench.exe, the timing measurements of plan step 13 (tests\bench\bench_main.c with tests\c\support.c), optimised only (dev\measure.py runs it).
 # Flags: C11 with C11 atomics, all warnings as errors, and /fp:precise (no fast-math: the determinism rule of docs\canopy_design.md section 5).
+param([switch]$Stress, [switch]$Bench)
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
@@ -50,9 +54,37 @@ if ($haveAsan) {
     Remove-Item $asanExe                      # an old build must not pass for the current code
 }
 
+if ($Stress) {
+    $stressSources = '"' + (Join-Path $root "tests\c\support.c") + '" "' + (Join-Path $root "tests\c\test_stress.c") + '" "' + (Join-Path $root "tests\stress\stress_main.c") + '"'
+    $stressBuild = Join-Path $build "stress"
+    $stressDebugBuild = Join-Path $build "stress_debug"
+    New-Item -ItemType Directory -Force -Path $stressBuild | Out-Null
+    New-Item -ItemType Directory -Force -Path $stressDebugBuild | Out-Null
+    $commands += "cl $flags $sources $stressSources /Fo`"$stressBuild\\`" /Fe`"$build\stress.exe`""
+    $commands += "cl $debugFlags $sources $stressSources /Fo`"$stressDebugBuild\\`" /Fe`"$build\stress_debug.exe`""
+    if ($haveAsan) {
+        $stressAsanBuild = Join-Path $build "stress_asan"
+        New-Item -ItemType Directory -Force -Path $stressAsanBuild | Out-Null
+        $commands += "cl $asanFlags $sources $stressSources /Fo`"$stressAsanBuild\\`" /Fd`"$stressAsanBuild\\vc.pdb`" /Fe`"$build\stress_asan.exe`" /link /INCREMENTAL:NO"
+    }
+}
+
+if ($Bench) {
+    $benchBuild = Join-Path $build "bench"
+    New-Item -ItemType Directory -Force -Path $benchBuild | Out-Null
+    $benchSources = '"' + (Join-Path $root "tests\c\support.c") + '" "' + (Join-Path $root "tests\bench\bench_main.c") + '"'
+    $commands += "cl $flags $sources $benchSources /Fo`"$benchBuild\\`" /Fe`"$build\bench.exe`""
+}
+
 foreach ($command in $commands) {
     cmd /c "`"$vcvars`" >nul && $command"
     if ($LASTEXITCODE -ne 0) { throw "Build failed: $command" }
 }
 if ($haveAsan) { Write-Host "built $dll, $exe, $debugExe and $asanExe" }
 else { Write-Host "built $dll, $exe and $debugExe (AddressSanitizer is not installed: no sanitizer build)" }
+if ($Bench) { Write-Host "built ${build}\bench.exe" }
+if ($Stress) {
+    $stressNames = "stress.exe, stress_debug.exe"
+    if ($haveAsan) { $stressNames += ", stress_asan.exe" }
+    Write-Host "built the stress programs in ${build}: $stressNames"
+}

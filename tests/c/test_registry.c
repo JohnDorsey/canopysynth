@@ -1,5 +1,6 @@
 /* Tests: the node-type descriptor and the registry (docs/canopy_design.md section 12). */
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #include "../../src/canopy_internal.h"
 #include "ctest.h"
@@ -353,8 +354,32 @@ static void test_c_status_messages_exist_for_every_code(void)
     CHECK(canopy_abi_version() == CANOPY_ABI_VERSION);
 }
 
+/* Found by the sweep of the C API (plan step 13): registry_at must be NULL one past the last entry whatever the count. The entries are kept in an array
+   that doubles from 16, so a count of 16 or 32 puts the first index past the end exactly at the end of the block, where a read shows up in the
+   AddressSanitizer run (and in the debug heap's guards); the other counts are there so that the test does not depend on the growth. */
+static void test_c_registry_at_gives_null_just_past_the_end_whatever_the_count(void)
+{
+    int count, i;
+    for (count = 0; count <= 40; count++) {
+        CanopyRegistry *registry = canopy_registry_new_empty();
+        char keys[40][16];
+        for (i = 0; i < count; i++) {
+            CanopyNodeType type = make_valid();
+            snprintf(keys[i], sizeof keys[i], "v.k%d", i);
+            type.key = keys[i];
+            CHECK(canopy_registry_register(registry, &type) == CANOPY_OK);
+        }
+        CHECK(canopy_registry_count(registry) == count);
+        CHECK(canopy_registry_at(registry, count) == NULL && canopy_registry_at(registry, count + 1) == NULL && canopy_registry_at(registry, -1) == NULL);
+        CHECK(canopy_registry_at(registry, INT32_MAX) == NULL && canopy_registry_at(registry, INT32_MIN) == NULL);
+        for (i = 0; i < count; i++) CHECK(canopy_registry_at(registry, i) != NULL && canopy_registry_at(registry, i) == canopy_registry_find(registry, keys[i]));
+        canopy_registry_free(registry);
+    }
+    CHECK_HEAP();
+}
 void register_test_registry(void)
 {
+    RUN(test_c_registry_at_gives_null_just_past_the_end_whatever_the_count);
     RUN(test_c_a_valid_type_registers_and_reads_back_all_its_metadata);
     RUN(test_c_the_registry_keeps_its_own_copy_of_every_string_and_array);
     RUN(test_c_types_are_listed_in_registration_order);

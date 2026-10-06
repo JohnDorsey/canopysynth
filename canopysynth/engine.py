@@ -177,13 +177,19 @@ class Engine:
 
     def action(self, node_id, action):
         """A button of a node was pressed: calls the node type's action handler with this name ("open" of the file node; "play", "pause" and
-        "device" of the preview node). GraphError if the installed graph has no such node."""
-        raw = action.encode("utf-8")
-        self._node_status(self._lib.canopy_engine_action(self._handle(), node_id, raw), node_id, f"action {action!r}")
+        "device" of the preview node). GraphError if the installed graph has no such node, if `node_id` is not a whole number that fits in 64 bits
+        or if `action` is not text."""
+        handle = self._handle()
+        node_id = _values.node_id(node_id)
+        raw = _values.text(action, f"node {node_id}", "the name of an action").encode("utf-8")
+        self._node_status(self._lib.canopy_engine_action(handle, node_id, raw), node_id, f"action {action!r}")
 
     def node_message(self, node_id):
-        """What a node of the installed graph last said about itself ("file not found: ...", a device that cannot be opened); "" for nothing."""
-        status, text = self._text(self._lib.canopy_engine_node_message, self._handle(), node_id)
+        """What a node of the installed graph last said about itself ("file not found: ...", a device that cannot be opened); "" for nothing.
+        GraphError for a node ID that is not a whole number in 64 bits or that the installed graph does not have."""
+        handle = self._handle()
+        node_id = _values.node_id(node_id)
+        status, text = self._text(self._lib.canopy_engine_node_message, handle, node_id)
         self._node_status(status, node_id, "node_message")
         return text
 
@@ -209,19 +215,27 @@ class Engine:
         return text.split("\n") if text else []
 
     def preview_state(self, node_id):
-        """(playing, time_ns) of a realtime preview node of the installed graph: playing is a bool, time_ns the playback time in nanoseconds."""
+        """(playing, time_ns) of a realtime preview node of the installed graph: playing is a bool, time_ns the playback time in nanoseconds.
+        GraphError for a node ID that is not a whole number in 64 bits, that the installed graph does not have, or that is not a preview node."""
+        handle = self._handle()
+        node_id = _values.node_id(node_id)
         playing, time_ns = ctypes.c_int32(), ctypes.c_int64()
-        self._node_status(self._lib.canopy_preview_state(self._handle(), node_id, ctypes.byref(playing), ctypes.byref(time_ns)), node_id, "preview_state")
+        self._node_status(self._lib.canopy_preview_state(handle, node_id, ctypes.byref(playing), ctypes.byref(time_ns)), node_id, "preview_state")
         return bool(playing.value), time_ns.value
 
     def preview_set_time(self, node_id, time_ns):
-        """Moves the playback time of a realtime preview node (nanoseconds, any value; rounded to a frame of 48000 Hz)."""
-        self._node_status(self._lib.canopy_preview_set_time(self._handle(), node_id, _time(time_ns, "time_ns")), node_id, "preview_set_time")
+        """Moves the playback time of a realtime preview node (nanoseconds, any value; rounded to a frame of 48000 Hz). GraphError and ValueError as
+        for `preview_state` (ValueError for a time that is not a whole number in 64 bits)."""
+        handle = self._handle()
+        node_id = _values.node_id(node_id)
+        self._node_status(self._lib.canopy_preview_set_time(handle, node_id, _time(time_ns, "time_ns")), node_id, "preview_set_time")
 
     def preview_warning(self, node_id):
         """The warning of design section 9 for a realtime preview node: the nodes that feed it and are not flagged realtime safe, as a sentence; ""
-        when there are none."""
-        status, text = self._text(self._lib.canopy_preview_warning, self._handle(), node_id)
+        when there are none. GraphError as for `preview_state`."""
+        handle = self._handle()
+        node_id = _values.node_id(node_id)
+        status, text = self._text(self._lib.canopy_preview_warning, handle, node_id)
         self._node_status(status, node_id, "preview_warning")
         return text
 

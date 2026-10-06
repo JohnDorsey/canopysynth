@@ -2,6 +2,8 @@
    Built twice by build.ps1: normally (run_c_tests.exe) and, with CANOPY_DEBUG_HEAP, against the MSVC debug runtime (run_c_tests_debug.exe):
    there every heap operation validates the whole heap, ctest_heap_ok() can be asked at any time, and leaked blocks are reported at the end. */
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "ctest.h"
 
 #ifdef CANOPY_DEBUG_HEAP
@@ -13,6 +15,28 @@
 
 int ctest_passed = 0, ctest_failed = 0, ctest_current_failed = 0;
 const char *ctest_current_name = "(none yet)";
+
+int ctest_selected(const char *name)
+{
+    static char filter[1024];
+    static int read;
+    char *piece, *next = NULL;
+    char copy[1024];
+    if (!read) {
+        const char *text = getenv("CANOPY_C_TESTS");
+        filter[0] = '\0';
+        if (text) {
+            strncpy(filter, text, sizeof filter - 1);
+            filter[sizeof filter - 1] = '\0';
+        }
+        read = 1;
+    }
+    if (filter[0] == '\0') return 1;
+    strcpy(copy, filter);
+    for (piece = strtok_s(copy, ";", &next); piece; piece = strtok_s(NULL, ";", &next))
+        if (*piece && strstr(name, piece)) return 1;
+    return 0;
+}
 
 #ifdef _WIN32
 static LONG WINAPI crash_handler(EXCEPTION_POINTERS *info)
@@ -50,6 +74,10 @@ void register_test_fileread(void);
 void register_test_audio(void);
 void register_test_service(void);
 void register_test_preview(void);
+void register_test_overrun(void);
+void register_test_wavfuzz(void);
+void register_test_stress(void);
+void register_test_determinism(void);
 
 int main(void)
 {
@@ -82,6 +110,10 @@ int main(void)
     register_test_audio();
     register_test_service();
     register_test_preview();
+    register_test_overrun();
+    register_test_wavfuzz();
+    register_test_stress();
+    register_test_determinism();
     printf("\n%d passed, %d failed\n", ctest_passed, ctest_failed);
 #ifdef CANOPY_DEBUG_HEAP
     if (_CrtDumpMemoryLeaks()) {

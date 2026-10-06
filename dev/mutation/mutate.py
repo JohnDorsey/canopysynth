@@ -13,6 +13,10 @@ A spec file defines MUTATIONS = [(name, file, old, new), ...]: `file` is relativ
 The exit code is 0 only if every mutation was caught and the suite is green again after the files are restored: a survivor, a build failure and a mutation
 that was SKIPPED (its `old` text is not in the file any more, because the code moved: the spec needs a new anchor) all make it 1.
 A spec may also define AREAS = ["editor", ...]: the test files to run after a mutation of a .py file (see run_suite).
+A spec may define ARGS = [...] (arguments added to every run of run_tests.py, such as ["-k", "text"] to run only the Python tests whose name has
+that text) and ENV = {...} (environment variables for those runs, such as {"CANOPY_C_TESTS": "text;more"} to run only the C tests whose name has one
+of the pieces): a FOCUSED campaign, in which only the tests under examination judge each fault, to see what they catch on their own. They apply to the
+runs before and during the campaign; the last run, which checks that the restored files are green, is always the whole suite.
 Every file touched is restored afterwards, also if this script is interrupted (a backup file sits next to it meanwhile). If a run was killed
 hard and left a *.mutation_backup file, this script refuses to start: copy the backup over the source file (it is the original) and delete it.
 
@@ -35,14 +39,15 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def run_suite(python_only=False, areas=None, times=None, record=None):
+def run_suite(python_only=False, areas=None, times=None, record=None, extra=(), env=None):
     """The suite, as one run of run_tests.py: (verdict, the names of the failing tests, the output). For a mutation in a .py file the C code is
     unchanged, so `python_only` skips the build and the two extra C runs (the C tests still run once, and every Python test runs unless `areas`
     names the test files, as `run_tests.py` takes them: a spec of mutations that only the editor's tests could notice can say so with AREAS = [...]
     and each run is several times shorter; a mutation then reported as SURVIVED is run again against the whole suite by hand before it is believed).
     `times` is the path of a file written by an earlier run with `record`: it asks for the fast run, which stops at its first failing test, runs the
     cheapest tests first by those times and, when `python_only`, leaves out the C tests altogether. `record` is a path the run writes how long each
-    Python test took to."""
+    Python test took to. `extra` is a list of arguments added at the end of the command and `env` a dict of environment variables added to the
+    run's environment (a spec's ARGS and ENV: see the top of this file)."""
     command = [sys.executable, "run_tests.py"]
     if python_only:
         command += list(areas or [])
@@ -51,7 +56,8 @@ def run_suite(python_only=False, areas=None, times=None, record=None):
         command += ["--fail-fast", "--order-by-times", times]
     if record is not None:
         command += ["--record-times", record]
-    result = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
+    command += list(extra)
+    result = subprocess.run(command, capture_output=True, text=True, cwd=ROOT, env=dict(os.environ, **env) if env else None)
     out = result.stdout + result.stderr
     if "the build failed" in out or "Build failed" in out:
         return "BUILD FAILED", [], out
@@ -99,6 +105,11 @@ def main(argv):
         exec(handle.read(), namespace)                                    # noqa: S102 - a spec file written by us
     only = set(argv[1:])
     mutations = [m for m in namespace["MUTATIONS"] if not only or m[0].split()[0] in only]
+    options = {}                                                          # what a focused spec adds to every run but the last (see the top of this file)
+    if namespace.get("ARGS"):
+        options["extra"] = list(namespace["ARGS"])
+    if namespace.get("ENV"):
+        options["env"] = dict(namespace["ENV"])
     backups, tally = {}, {"caught": 0, "SURVIVED": 0, "BUILD FAILED": 0, "SKIPPED": 0}
     times = None
     if not thorough:
@@ -107,13 +118,13 @@ def main(argv):
     try:
         print("runs:", "thorough (every test of every run, in name order)" if thorough else
               "fast (stop at the first failing test, cheapest tests first, no C tests after a change to a Python file)", flush=True)
-        state, failed, out = run_suite(record=times)
+        state, failed, out = run_suite(record=times, **options)
         print("before any mutation:", state, totals(out), flush=True)
         if state != "SURVIVED":
             raise SystemExit("the suite must be green before mutating")
         if times is not None:                                             # the order the fast runs use must itself be a green run, before any mutation
             for areas in python_runs(mutations, namespace.get("AREAS")):
-                state, failed, out = run_suite(python_only=True, areas=areas, times=times)
+                state, failed, out = run_suite(python_only=True, areas=areas, times=times, **options)
                 print(f"before any mutation, in the fast order ({', '.join(areas) if areas else 'every Python test'}):", state, totals(out), flush=True)
                 if state != "SURVIVED":
                     raise SystemExit("the suite must be green in the fast order too before mutating")
@@ -136,7 +147,7 @@ def main(argv):
                 handle.write(original.replace(old, new).replace("\n", "\r\n").encode("utf-8"))
             fast = None if os.path.normpath(path) == "run_tests.py" else times        # (the fast flags are what a mutation of run_tests.py may break: it is run the thorough way)
             started = time.time()
-            state, failed, out = run_suite(python_only=python_file, areas=namespace.get("AREAS") if python_file else None, times=fast)
+            state, failed, out = run_suite(python_only=python_file, areas=namespace.get("AREAS") if python_file else None, times=fast, **options)
             shutil.copy2(backups[full], full)
             dll_mutated = dll_mutated or not python_file
             tally[state] += 1

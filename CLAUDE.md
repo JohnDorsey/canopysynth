@@ -19,18 +19,30 @@ python run_tests.py --no-asan       # skip the third, AddressSanitizer run of th
 python run_tests.py --no-c          # skip the C tests altogether (for a run after a change to a Python file, which cannot change what they say)
 python run_tests.py --fail-fast     # stop at the first failing test, and skip the C programs after a failing one; with --record-times FILE (write how long
                                     # each Python test took) and --order-by-times FILE (cheapest first by those times) it is what the mutation check runs
-powershell -ExecutionPolicy Bypass -File build.ps1    # only the build
+powershell -ExecutionPolicy Bypass -File build.ps1    # only the build (-Stress also builds build\stress.exe, stress_debug.exe and stress_asan.exe, the C multi-thread stress of plan
+                                                      # step 13: `stress.exe [seconds] [--seed N] [--readers N] [--no-preview] [--quiet]`, exit code 3 when its watchdog finds
+                                                      # that nothing moved for 20 s; -Bench also builds build\bench.exe, the timing measurements: `python dev/measure.py [bridge|editor|c|device]`)
+python dev/stress.py [seconds] [--seed N]             # the Python-level stress (plan step 13): the real editor, off-screen, makes random edits through the public API while
+                                                      # threads write a boundary inlet, read what it feeds, replace the file node's file and ask the engine what it holds
+powershell -ExecutionPolicy Bypass -File dev/analyze.ps1   # static analysis of src/ (cl /analyze, the output filtered); a clean run prints no warning of ours
 python dev/mutation/mutate.py dev/mutation/step3.py   # mutation check: breaks the C code in 83 specific ways, one at a time, and requires the
                                                       # suite to notice each (add a spec file per step; step4.py has 134, step5.py 53, step6.py 64,
                                                       # step7.py 142, step8.py 141, step9.py 76, step10.py 113, step11.py 178, step11b.py 39, step12.py 112,
                                                       # step12b.py 26, runner.py 75 (the two runners themselves), known.py 4 (two survivors and two
-                                                      # detections, to check the runner): step8.py (but for 9 of its faults), most of step9.py and every spec from step10.py on break Python files,
+                                                      # detections, to check the runner); the step 13 specs are FOCUSED campaigns, judged by the new tests alone: step13.py 20 (the overrun
+                                                      # sweep), step13b.py 10 (the WAV loader), step13c.py 6 and step13c2.py 1 (the stress), step13d.py 7 (determinism), step13e.py 7 (the argument
+                                                      # checks of Engine) and step13f.py 11 (the sweep of the C API): a spec's `ENV` (for example CANOPY_C_TESTS) and `ARGS` (for example -k text) say which tests judge;
+                                                      # step8.py (but for 9 of its faults), most of step9.py and every spec from step10.py on break Python files,
                                                       # for which the runner skips the build and the C tests, and a spec with AREAS = [...] (step11.py) runs only those
                                                       # Python test files; a run that crashes without a total is "caught"; the exit code is 0 only if every mutation was caught)
                                                       # Each run is a fast one: it stops at the first failing test, runs the cheapest tests first (by the times the
                                                       # campaign's first, whole run recorded) and after a mutation of a Python file leaves out the C tests; none of that can
                                                       # turn a survivor into a detection (see mutate.py). Add --thorough for the old way: every test of every run.
 python dev/mutation/mutate.py dev/mutation/step4.py N01 P30  # only the mutations whose first word is one of these (here N01 and P30)
+set CANOPY_C_TESTS=text;text  &  build\run_c_tests.exe      # (an environment variable of the C programs, also of the debug and sanitizer ones: only the C tests whose name contains one of the
+                                                      # pieces run, so one or a few can be tried alone; python run_tests.py passes it on. Others: CANOPY_RECORD=1 prints the table of recorded hashes of
+                                                      # test_determinism.c (rerecord only after a deliberate change of a node's arithmetic), CANOPY_FUZZ_ITERATIONS for the WAV fuzz,
+                                                      # CANOPY_API_FUZZ_OPS and CANOPY_API_FUZZ_DICTS for the fuzz of the Python API)
                                                       # (a mutation that deadlocks, like the lock ones K01 to K06, is stopped by the runner after
                                                       # CANOPY_TEST_TIMEOUT seconds, default 180: set it to 30 for such a run)
 python dev/listen_check.py --list                     # the audio devices of this machine; without --list: the listening check of plan step 7 (needs a person
@@ -63,8 +75,17 @@ python dev/editor_check.py                            # the real-window check of
     used, so that importing the package does not load tkinter). Importing the package does not load the DLL;
     the first `Graph()` or `Engine()` does.
   - `tests/c/` plain C: `ctest.h` (`CHECK`, `CHECK_INT`, `CHECK_HEAP`, `RUN`), `support.c/.h` (guarded output buffers, the `test.*` node types, the `Rig`
-    that builds a graph, engine and instance and checks for leaks on `rig_close`), one `test_<area>.c` per area registered in `run_c_tests.c`.
-  - `tests/python/` plain `test_*` functions; `engine_dll.py` has the ctypes bindings and a way to write node types in Python (tests only);
+    that builds a graph, engine and instance and checks for leaks on `rig_close`), one `test_<area>.c` per area registered in `run_c_tests.c`. Step 13 added
+    `test_overrun.c` (every node and graph shape asked at every count and time shape, with canaries round the buffer and an oracle of its own for what overflows),
+    `test_wavfuzz.c` (damaged WAV files: refused or played, never a crash, an overrun or a leak, and the same decision in every build), `test_stress.c` + `stress.h`
+    (the multi-thread stress: `stress_run` is the test of the suite for 2.5 s and the stand-alone program of `tests/stress/stress_main.c` for as long as asked) and
+    `test_determinism.c` (twelve whole graphs asked a fixed list of queries and their hashes recorded in a table, checked by all three C programs; and the properties:
+    asked again, in reverse, by a cold instance, by other threads, after installs that cannot matter). `tests/bench/bench_main.c` is the timing program.
+  - `tests/python/` plain `test_*` functions; `engine_dll.py` has the ctypes bindings and a way to write node types in Python (tests only); step 13 added
+    `test_determinism.py` (the public API against the hash the C table records), `test_api_fuzz.py` (garbage arguments to every public call, and saved graphs damaged in
+    random places: only the documented exceptions), `test_c_api.py` (the DLL's export table against the headers and against every ctypes declaration, and every one of the
+    63 exported functions called with NULL and extreme arguments), `test_shutdown.py` (a process that ends while the preview plays; memory that runs out for real, with a
+    job object), `stress_threads.py` + `test_stress_py.py` (the Python-level stress) and `fixtures`-free recordings: the only recorded outputs are in the C table;
     `graph_dll.py` builds a catalog of Python, built-in and hidden test types and converts a `Graph` into the C description to compile it in a real
     engine; `fixtures/graph_v1.json` is the hand-written version 1 file the saved format is pinned by (a format change must keep it loading);
     `test_editor_geometry.py` tests the editor's geometry, `test_editor.py` the widget in a real tkinter window placed at +6000+6000 (a withdrawn
@@ -76,16 +97,18 @@ python dev/editor_check.py                            # the real-window check of
     however far apart: the tests' `send` and the check script's `event` give each event a time of its own (a double-click test passes close times). The
     editor finds double clicks itself from the events' times (500 ms, 5 pixels), never through Tk's `<Double-...>` bindings, which proved unreliable.
   - A mutation campaign changes the project's own source files while it runs, so each campaign runs in a copy of the project of its own (`robocopy` the
-    folder without `.git` and `__pycache__` and without a renamed `*.build*-in-use` DLL, run `mutate.py` there with `CANOPY_TEST_TIMEOUT=150`, log to a file),
-    not more than four at a time (each starts with a whole run of the suite), started about 75 s apart; and the machine must stay awake: call
+    folder without `.git` and `__pycache__` and without a renamed `*.build*-in-use` DLL, run `mutate.py` there with `CANOPY_TEST_TIMEOUT=300`, log to a file),
+    not more than three at a time (each starts with a whole run of the suite: since step 13 the C programs alone take 17 s, 52 s under the debug heap and 72 s under AddressSanitizer on a quiet machine, the Python tests 54 s, so the whole suite 209 s with the build), started about 75 s apart; and the machine must stay awake: call
     `request_keep_awake` with `session_idle` before waiting between turns (a sleeping machine killed the processes silently). A spec whose `old` text is no
     longer in its file is SKIPPED, which `mutate.py` reports and answers with exit code 1: the code moved, so the spec needs a new anchor (the runner
     cannot see that from a green total). The runner builds again before a mutation of a Python file that follows one of a C file. A log written with
     PowerShell's `*>` is UTF-16 here: read it with `Get-Content` (or decode it as `utf-16`); `grep` and `tail | grep` find nothing in it.
   - A running `python dev/editor_check.py --try` window keeps `canopysynth/canopysynth.dll` open, and the linker then cannot overwrite it: a loaded DLL
     can be renamed (`canopysynth.dll.build13-in-use` was, at step 11, and `build16-in-use` at build 17), after which the build writes a fresh one. Close the window and delete the old file.
-  - `dev/mutation/` the mutation check; `docs/`; `build/` (generated).
+  - `dev/mutation/` the mutation check; `dev/` also has `analyze.ps1`, `stress.py`, `measure.py`; `docs/` (`step13_measurements.txt` is the raw output of the measurements); `build/` (generated).
 - Test names are unique: C tests start with `test_c_`, Python tests with `test_py_`.
+- The Python bridge checks the arguments of `Engine.action`, `node_message` and the `preview_*` calls like those of `set_knob` (a node ID is a whole number in 64 bits, an action is
+  text: `GraphError` otherwise; a closed engine is `RuntimeError` first): ctypes cuts an int to 64 bits without a word, so an unchecked ID presses another node's button.
 - Delivery counter: `CANOPYSYNTH_BUILD`, bumped by exactly 1 once per finished prompt that changed code. It lives in `src/canopy.h` and
   `canopysynth/version.py` (a test checks they agree); the DLL exports it.
 - Compiler flags: C11 with `/experimental:c11atomics`, /O2 /W4 /WX, `/fp:precise` (no fast-math: the determinism rule), `_CRT_SECURE_NO_WARNINGS`. No
@@ -104,6 +127,10 @@ python dev/editor_check.py                            # the real-window check of
   the packages prepared for it at the start of a query by swapping pointers, and the editing thread frees what it has finished with
   (`canopy_instance_reap`). The preview's audio callback follows the query rules too (no allocation, no lock: tests count allocations while it plays
   and hold the engine's locks).
+- What an install does while a query runs (read in `canopy_install.c`, relied on by the stress's oracle): the new knob positions are written BEFORE the graph is
+  published, so an instance that has not adopted yet reads the new knobs with the old wiring; a node with only a point handler (`test.sum`) is asked for each sample
+  of a span in turn and reads its sources each time, so a boundary value written meanwhile can change between two samples of one span, while a node with a span
+  handler reads a source once; a file node's span is one file whatever is opened meanwhile. Design section 5 promises no consistent snapshot, and none is given.
 - Audio in tests: they choose the null backend (`canopy_engine_set_audio_backend(engine, CANOPY_AUDIO_NULL)`) and never open the machine's real
   device (a bug or a mutation that sent them there would play their signals on it). miniaudio's own allocations are counted but not failed by the
   tests' failure hook (it leaks when they fail inside `ma_device_init`: see the plan's step 7 decisions). Allocation hooks: `canopy_alloc_fail_after(n)`

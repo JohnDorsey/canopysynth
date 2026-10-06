@@ -177,65 +177,80 @@ def test_py_a_knob_moved_in_the_editor_reaches_the_engine_at_once_by_dragging_or
             instance.close()
 
 
+def random_edit_run(editor, graph, engine, instance, rng, steps, written=None, protected=(), between=None, stop=None):
+    """A long run of random edits made through the editor, with these checks after each: no edit left a graph the engine could not compile, each edit that
+    changes the graph compiled it exactly once and the others not at all, the engine's boundary nodes are the editor's, and what the engine gives for each
+    boundary outlet is what the picture says (the wire's source, as last written, or the knob). `written` is what the host last wrote to each boundary inlet
+    that is there (by node ID; a node starts at 0). `protected` are node IDs the run leaves alone (another thread uses them: the run neither edits nor checks
+    them); `between(step)` is called after each edit (the stress pumps Tk and presses buttons there; it returns how many times it installed the
+    graph itself, if it did) and `stop()` ends the run early. Returns what was done."""
+    written = dict(written or {})
+    base, compiles = serial(engine), 0
+    names = ["", "x", "y", "free", "default0", "default1", "n0", "n1", "n2", "N0"]
+    done = dict.fromkeys(("add", "renamed", "refused", "connected", "unconnected", "disconnected", "removed", "knob", "write"), 0)
+    actions = ["add", "add", "rename", "rename", "rename", "connect", "connect", "disconnect", "remove", "knob", "write", "write"]
+    for step in range(steps):
+        if stop is not None and stop():
+            break
+        all_boundary = [n for n in graph.nodes() if n.type in ("boundary_inlet", "boundary_outlet")]
+        boundary = [n for n in all_boundary if n.id not in protected]
+        inlets = [n for n in boundary if n.type == "boundary_inlet"]
+        outlets = [n for n in boundary if n.type == "boundary_outlet"]
+        action = rng.choice(actions)
+        if action == "add" and len(boundary) < 10:
+            node = editor.add_node(rng.choice(["boundary_inlet", "boundary_outlet"]), 10 * step % 800, 450)
+            written[node.id] = 0.0
+            compiles, done["add"] = compiles + 1, done["add"] + 1
+        elif action == "rename" and boundary:
+            node, text = rng.choice(boundary), rng.choice(names)
+            old, taken = node.settings["name"], {n.settings["name"] for n in all_boundary if n is not node}
+            result = editor.edit_setting(node, "name", text)
+            assert result == (text != "" and text not in taken), (step, text, sorted(taken))
+            if result and text != old:
+                compiles, done["renamed"] = compiles + 1, done["renamed"] + 1
+            done["refused"] += not result
+        elif action == "connect" and inlets and outlets:
+            source, target = rng.choice(inlets), rng.choice(outlets)
+            reason = graph.can_connect(source.outlet("out"), target.inlet("in"))
+            made = editor.connect(source.outlet("out"), target.inlet("in"))
+            assert made == (reason is None) and (made or reason in editor.message), (step, reason, editor.message)
+            compiles, done["connected"], done["unconnected"] = compiles + made, done["connected"] + made, done["unconnected"] + (not made)
+        elif action == "disconnect" and any(graph.connection_into(n.inlet("in")) for n in outlets):
+            target = rng.choice([n for n in outlets if graph.connection_into(n.inlet("in"))])
+            assert editor.disconnect(target.inlet("in"))
+            compiles, done["disconnected"] = compiles + 1, done["disconnected"] + 1
+        elif action == "remove" and len(boundary) > 2:
+            node = rng.choice(boundary)
+            editor.remove_node(node)
+            written.pop(node.id, None)
+            compiles, done["removed"] = compiles + 1, done["removed"] + 1
+        elif action == "knob" and outlets:
+            editor.set_knob(rng.choice(outlets), "in", rng.choice([-1.0, -0.5, 0.0, 0.25, 1.0]))
+            done["knob"] += 1
+        elif action == "write" and inlets:
+            node, value = rng.choice(inlets), rng.choice([-2.5, 0.0, 0.5, 3.75])
+            engine.set_boundary(node.settings["name"], value)
+            written[node.id] = value
+            done["write"] += 1
+        assert "not applied" not in editor.message, (step, editor.message)                  # no edit left a graph the engine could not compile
+        assert serial(engine) == base + compiles, (step, serial(engine) - base, compiles)  # each edit that changes the graph compiled it once, the others not at all
+        assert graph.boundary_nodes() == engine.boundary_nodes(), step                       # the engine's boundary nodes are the editor's: names, kinds, IDs
+        for node in graph.boundary_nodes():
+            if node.kind == "outlet" and node.node_id not in protected:                       # and what they give is what the picture says: the wire's source or the knob
+                outlet = graph.node(node.node_id)
+                connection = graph.connection_into(outlet.inlet("in"))
+                wanted = written[connection.outlet.node.id] if connection else outlet.knobs["in"]
+                assert instance.value(node.name, 0) == wanted, (step, node.name)
+        if between is not None:
+            compiles += between(step) or 0                                                      # (it returns how many times it installed the graph itself)
+    return done
+
+
 def test_py_after_every_edit_of_a_long_random_run_the_engine_plays_exactly_the_graph_the_editor_shows_and_no_compile_fails():
     with linked() as (editor, graph, nodes, engine):
         instance = engine.new_instance()
         try:
-            rng = random.Random(20261005)
-            written = {nodes["src"].id: 0.0}                                         # what the host last wrote to each boundary inlet, by node ID (a node starts at 0)
-            base, compiles = serial(engine), 0
-            names = ["", "x", "y", "free", "default0", "default1", "n0", "n1", "n2", "N0"]
-            done = dict.fromkeys(("add", "renamed", "refused", "connected", "unconnected", "disconnected", "removed", "knob", "write"), 0)
-            actions = ["add", "add", "rename", "rename", "rename", "connect", "connect", "disconnect", "remove", "knob", "write", "write"]
-            for step in range(400):
-                boundary = [n for n in graph.nodes() if n.type in ("boundary_inlet", "boundary_outlet")]
-                inlets = [n for n in boundary if n.type == "boundary_inlet"]
-                outlets = [n for n in boundary if n.type == "boundary_outlet"]
-                action = rng.choice(actions)
-                if action == "add" and len(boundary) < 10:
-                    node = editor.add_node(rng.choice(["boundary_inlet", "boundary_outlet"]), 10 * step % 800, 450)
-                    written[node.id] = 0.0
-                    compiles, done["add"] = compiles + 1, done["add"] + 1
-                elif action == "rename":
-                    node, text = rng.choice(boundary), rng.choice(names)
-                    old, taken = node.settings["name"], {n.settings["name"] for n in boundary if n is not node}
-                    result = editor.edit_setting(node, "name", text)
-                    assert result == (text != "" and text not in taken), (step, text, sorted(taken))
-                    if result and text != old:
-                        compiles, done["renamed"] = compiles + 1, done["renamed"] + 1
-                    done["refused"] += not result
-                elif action == "connect" and inlets and outlets:
-                    source, target = rng.choice(inlets), rng.choice(outlets)
-                    reason = graph.can_connect(source.outlet("out"), target.inlet("in"))
-                    made = editor.connect(source.outlet("out"), target.inlet("in"))
-                    assert made == (reason is None) and (made or reason in editor.message), (step, reason, editor.message)
-                    compiles, done["connected"], done["unconnected"] = compiles + made, done["connected"] + made, done["unconnected"] + (not made)
-                elif action == "disconnect" and any(graph.connection_into(n.inlet("in")) for n in outlets):
-                    target = rng.choice([n for n in outlets if graph.connection_into(n.inlet("in"))])
-                    assert editor.disconnect(target.inlet("in"))
-                    compiles, done["disconnected"] = compiles + 1, done["disconnected"] + 1
-                elif action == "remove" and len(boundary) > 2:
-                    node = rng.choice(boundary)
-                    editor.remove_node(node)
-                    written.pop(node.id, None)
-                    compiles, done["removed"] = compiles + 1, done["removed"] + 1
-                elif action == "knob" and outlets:
-                    editor.set_knob(rng.choice(outlets), "in", rng.choice([-1.0, -0.5, 0.0, 0.25, 1.0]))
-                    done["knob"] += 1
-                elif action == "write" and inlets:
-                    node, value = rng.choice(inlets), rng.choice([-2.5, 0.0, 0.5, 3.75])
-                    engine.set_boundary(node.settings["name"], value)
-                    written[node.id] = value
-                    done["write"] += 1
-                assert "not applied" not in editor.message, (step, editor.message)                  # no edit left a graph the engine could not compile
-                assert serial(engine) == base + compiles, (step, serial(engine) - base, compiles)  # each edit that changes the graph compiled it once, the others not at all
-                assert graph.boundary_nodes() == engine.boundary_nodes(), step                       # the engine's boundary nodes are the editor's: names, kinds, IDs
-                for node in graph.boundary_nodes():
-                    if node.kind == "outlet":                                                        # and what they give is what the picture says: the wire's source or the knob
-                        outlet = graph.node(node.node_id)
-                        connection = graph.connection_into(outlet.inlet("in"))
-                        wanted = written[connection.outlet.node.id] if connection else outlet.knobs["in"]
-                        assert instance.value(node.name, 0) == wanted, (step, node.name)
+            done = random_edit_run(editor, graph, engine, instance, random.Random(20261005), 400, written={nodes["src"].id: 0.0})
             assert min(done.values()) > 5, done                                                       # (the run did try every kind of edit, often)
         finally:
             instance.close()

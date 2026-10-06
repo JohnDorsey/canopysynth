@@ -1,0 +1,300 @@
+CANOPY step 13: timing measurements (build 18), taken on 2026-10-06.
+Machine: AMD Ryzen 5 7600X (6 cores, 12 logical processors), Windows 10 (19045), Python 3.11.9, MSVC 2022, the optimised build (/O2 /fp:precise).
+The programs: build\bench.exe (tests\bench\bench_main.c; powershell -File build.ps1 -Bench) and dev\measure.py. These are the raw outputs; the plan
+(docs\canopy_plan.md, "Step 13: what was verified and measured") summarises them.
+
+HOW TO READ THEM. The machine is not quiet in a way a program can control: the same row varies from run to run, by up to 2.7 times for the slowest of four runs of a
+query row against the best. So section 1 gives the BEST of four runs of every row of bench queries (the run the machine disturbed least), section 2 gives three
+complete runs of the scaling table, and sections 3 onwards are single runs. A first scaling table, taken before the per-thread counters of the benchmark were padded
+to separate cache lines, showed a collapse at 6 threads that was false sharing in the benchmark itself; it is not kept.
+
+====================================================================================================
+1. QUERIES: the best of four runs of `bench.exe queries` (one thread, one instance)
+====================================================================================================
+﻿  a boundary value read through an outlet        point     best         12.6 ns/call =    12.60 ns/sample    (the slowest of 4 runs:         24.3 ns, 1.93x)
+  a boundary value, span                         n=1       best         17.3 ns/call =    17.30 ns/sample    (the slowest of 4 runs:         25.3 ns, 1.46x)
+  a boundary value, span                         n=64      best         20.8 ns/call =     0.33 ns/sample    (the slowest of 4 runs:         36.5 ns, 1.75x)
+  a boundary value, span                         n=480     best         27.5 ns/call =     0.06 ns/sample    (the slowest of 4 runs:         58.7 ns, 2.13x)
+  a boundary value, span                         n=4800    best        134.3 ns/call =     0.03 ns/sample    (the slowest of 4 runs:        152.7 ns, 1.14x)
+  a boundary value, span                         n=65536   best       1615.4 ns/call =     0.02 ns/sample    (the slowest of 4 runs:       1682.6 ns, 1.04x)
+  a chain of 1 gains (point)                     point     best         20.2 ns/call =    20.20 ns/sample    (the slowest of 4 runs:         24.8 ns, 1.23x)
+  a chain of 1 gains (span handlers)             n=64      best         43.0 ns/call =     0.67 ns/sample    (the slowest of 4 runs:         50.8 ns, 1.18x)
+  a chain of 1 gains (span handlers)             n=480     best         76.9 ns/call =     0.16 ns/sample    (the slowest of 4 runs:         83.6 ns, 1.09x)
+  a chain of 1 gains (span handlers)             n=4800    best        585.8 ns/call =     0.12 ns/sample    (the slowest of 4 runs:        597.5 ns, 1.02x)
+  a chain of 1 gains (span handlers)             n=65536   best       6886.8 ns/call =     0.11 ns/sample    (the slowest of 4 runs:       7299.3 ns, 1.06x)
+  a chain of 8 gains (point)                     point     best         88.5 ns/call =    88.50 ns/sample    (the slowest of 4 runs:         92.4 ns, 1.04x)
+  a chain of 8 gains (span handlers)             n=64      best        207.2 ns/call =     3.24 ns/sample    (the slowest of 4 runs:        216.4 ns, 1.04x)
+  a chain of 8 gains (span handlers)             n=480     best        427.2 ns/call =     0.89 ns/sample    (the slowest of 4 runs:        445.4 ns, 1.04x)
+  a chain of 8 gains (span handlers)             n=4800    best       3379.1 ns/call =     0.70 ns/sample    (the slowest of 4 runs:       3535.5 ns, 1.05x)
+  a chain of 8 gains (span handlers)             n=65536   best      49661.3 ns/call =     0.76 ns/sample    (the slowest of 4 runs:      52065.8 ns, 1.05x)
+  a chain of 64 gains (point)                    point     best        918.0 ns/call =   918.00 ns/sample    (the slowest of 4 runs:       1076.7 ns, 1.17x)
+  a chain of 64 gains (span handlers)            n=64      best       1725.9 ns/call =    26.97 ns/sample    (the slowest of 4 runs:       2053.0 ns, 1.19x)
+  a chain of 64 gains (span handlers)            n=480     best       3685.8 ns/call =     7.68 ns/sample    (the slowest of 4 runs:       4025.9 ns, 1.09x)
+  a chain of 64 gains (span handlers)            n=4800    best      28827.7 ns/call =     6.01 ns/sample    (the slowest of 4 runs:      29833.8 ns, 1.03x)
+  a chain of 64 gains (span handlers)            n=65536   best     391917.6 ns/call =     5.98 ns/sample    (the slowest of 4 runs:     422304.4 ns, 1.08x)
+  saw + const -> sum (point handlers only)       n=480     best       6052.4 ns/call =    12.61 ns/sample    (the slowest of 4 runs:      10596.6 ns, 1.75x)
+  saw + const -> sum (point handlers only)       n=4800    best      60242.4 ns/call =    12.55 ns/sample    (the slowest of 4 runs:     153708.9 ns, 2.55x)
+  saw + const -> sum (point handlers only)       n=65536   best     817592.8 ns/call =    12.48 ns/sample    (the slowest of 4 runs:    1980450.0 ns, 2.42x)
+  a file, 480 samples over 10 ms (same density)  n=480     best       2106.8 ns/call =     4.39 ns/sample    (the slowest of 4 runs:       5753.1 ns, 2.73x)
+  a file, 480 samples over 40 ms (4x sparser)    n=480     best       2108.0 ns/call =     4.39 ns/sample    (the slowest of 4 runs:       5360.7 ns, 2.54x)
+  a file, 480 samples over 2.5 ms (4x denser)    n=480     best       2135.7 ns/call =     4.45 ns/sample    (the slowest of 4 runs:       3713.1 ns, 1.74x)
+  a file, the biggest span, 1.5 s                n=65536   best     285361.5 ns/call =     4.35 ns/sample    (the slowest of 4 runs:     500555.2 ns, 1.75x)
+  the test filter, playing on (cursor)           n=480     best       9888.5 ns/call =    20.60 ns/sample    (the slowest of 4 runs:      17363.5 ns, 1.76x)
+  the test filter, playing on (cursor)           n=4800    best      98492.6 ns/call =    20.52 ns/sample    (the slowest of 4 runs:     137228.5 ns, 1.39x)
+
+
+====================================================================================================
+2. THREADS: three runs of `bench.exe scaling` (each thread has an instance of its own; 6 cores, 12 logical processors)
+====================================================================================================
+﻿--- run 1
+SCALING (spans per second in all threads together, each thread with an instance of its own; this machine has 12 logical processors; "pinned": thread k runs on logical processor 2k, which on this machine is a core of its own, "free": wherever Windows puts it)
+  a chain of 8 gains, 480 samples    free    1 threads      2206454 spans/s  =  1.00x one thread  (100% of linear)
+  a chain of 8 gains, 480 samples    free    2 threads      4309988 spans/s  =  1.95x one thread  ( 98% of linear)
+  a chain of 8 gains, 480 samples    free    4 threads      6885513 spans/s  =  3.12x one thread  ( 78% of linear)
+  a chain of 8 gains, 480 samples    free    6 threads      8783446 spans/s  =  3.98x one thread  ( 66% of linear)
+  a chain of 8 gains, 480 samples    free    8 threads     11046879 spans/s  =  5.01x one thread  ( 63% of linear)
+  a chain of 8 gains, 480 samples    free   12 threads     12453828 spans/s  =  5.64x one thread  ( 47% of linear)
+  a chain of 8 gains, 4800 samples   free    1 threads       287226 spans/s  =  1.00x one thread  (100% of linear)
+  a chain of 8 gains, 4800 samples   free    2 threads       555955 spans/s  =  1.94x one thread  ( 97% of linear)
+  a chain of 8 gains, 4800 samples   free    4 threads       936716 spans/s  =  3.26x one thread  ( 82% of linear)
+  a chain of 8 gains, 4800 samples   free    6 threads      1179633 spans/s  =  4.11x one thread  ( 68% of linear)
+  a chain of 8 gains, 4800 samples   free    8 threads      1363480 spans/s  =  4.75x one thread  ( 59% of linear)
+  a chain of 8 gains, 4800 samples   free   12 threads      1492022 spans/s  =  5.19x one thread  ( 43% of linear)
+
+--- run 2
+SCALING (spans per second in all threads together, each thread with an instance of its own; this machine has 12 logical processors; "pinned": thread k runs on logical processor 2k, which on this machine is a core of its own, "free": wherever Windows puts it)
+  a chain of 8 gains, 480 samples    free    1 threads      2322267 spans/s  =  1.00x one thread  (100% of linear)
+  a chain of 8 gains, 480 samples    free    2 threads      4200618 spans/s  =  1.81x one thread  ( 90% of linear)
+  a chain of 8 gains, 480 samples    free    4 threads      7108303 spans/s  =  3.06x one thread  ( 77% of linear)
+  a chain of 8 gains, 480 samples    free    6 threads      9351227 spans/s  =  4.03x one thread  ( 67% of linear)
+  a chain of 8 gains, 480 samples    free    8 threads     10908896 spans/s  =  4.70x one thread  ( 59% of linear)
+  a chain of 8 gains, 480 samples    free   12 threads     10392030 spans/s  =  4.47x one thread  ( 37% of linear)
+  a chain of 8 gains, 4800 samples   free    1 threads       108130 spans/s  =  1.00x one thread  (100% of linear)
+  a chain of 8 gains, 4800 samples   free    2 threads       271999 spans/s  =  2.52x one thread  (126% of linear)
+  a chain of 8 gains, 4800 samples   free    4 threads       643383 spans/s  =  5.95x one thread  (149% of linear)
+  a chain of 8 gains, 4800 samples   free    6 threads      1100959 spans/s  = 10.18x one thread  (170% of linear)
+  a chain of 8 gains, 4800 samples   free    8 threads      1313199 spans/s  = 12.14x one thread  (152% of linear)
+  a chain of 8 gains, 4800 samples   free   12 threads      1481362 spans/s  = 13.70x one thread  (114% of linear)
+
+--- run 3
+SCALING (spans per second in all threads together, each thread with an instance of its own; this machine has 12 logical processors; "pinned": thread k runs on logical processor 2k, which on this machine is a core of its own, "free": wherever Windows puts it)
+  a chain of 8 gains, 480 samples    free    1 threads      2113649 spans/s  =  1.00x one thread  (100% of linear)
+  a chain of 8 gains, 480 samples    free    2 threads      4262441 spans/s  =  2.02x one thread  (101% of linear)
+  a chain of 8 gains, 480 samples    free    4 threads      7424326 spans/s  =  3.51x one thread  ( 88% of linear)
+  a chain of 8 gains, 480 samples    free    6 threads      9287110 spans/s  =  4.39x one thread  ( 73% of linear)
+  a chain of 8 gains, 480 samples    free    8 threads     11238509 spans/s  =  5.32x one thread  ( 66% of linear)
+  a chain of 8 gains, 480 samples    free   12 threads     11810855 spans/s  =  5.59x one thread  ( 47% of linear)
+  a chain of 8 gains, 4800 samples   free    1 threads       278854 spans/s  =  1.00x one thread  (100% of linear)
+  a chain of 8 gains, 4800 samples   free    2 threads       505193 spans/s  =  1.81x one thread  ( 91% of linear)
+  a chain of 8 gains, 4800 samples   free    4 threads       877143 spans/s  =  3.15x one thread  ( 79% of linear)
+  a chain of 8 gains, 4800 samples   free    6 threads      1128101 spans/s  =  4.05x one thread  ( 67% of linear)
+  a chain of 8 gains, 4800 samples   free    8 threads      1327371 spans/s  =  4.76x one thread  ( 60% of linear)
+  a chain of 8 gains, 4800 samples   free   12 threads      1497729 spans/s  =  5.37x one thread  ( 45% of linear)
+
+
+
+====================================================================================================
+3. INSTALLS, MEMORY, STALLS, PREVIEW, FILES, DEEP CHAINS: `python dev/measure.py c` (one run; its query and scaling parts are superseded by sections 1 and 2)
+====================================================================================================
+﻿machine: 12 logical processors, win32, Python 3.11.9
+
+QUERIES (one thread, one instance, the optimised build)
+  a boundary value read through an outlet      point                13.1 ns/call
+  a boundary value, span                       n=1            17.9 ns/call    17.92 ns/sample     0.086% of the time n samples last at 48 kHz
+  a boundary value, span                       n=64           20.9 ns/call     0.33 ns/sample     0.002% of the time n samples last at 48 kHz
+  a boundary value, span                       n=480          28.3 ns/call     0.06 ns/sample     0.000% of the time n samples last at 48 kHz
+  a boundary value, span                       n=4800        132.4 ns/call     0.03 ns/sample     0.000% of the time n samples last at 48 kHz
+  a boundary value, span                       n=65536      1644.4 ns/call     0.03 ns/sample     0.000% of the time n samples last at 48 kHz
+  a chain of 1 gains (point)                   point                20.4 ns/call
+  a chain of 1 gains (span handlers)           n=64           42.8 ns/call     0.67 ns/sample     0.003% of the time n samples last at 48 kHz
+  a chain of 1 gains (span handlers)           n=480          77.8 ns/call     0.16 ns/sample     0.001% of the time n samples last at 48 kHz
+  a chain of 1 gains (span handlers)           n=4800        592.0 ns/call     0.12 ns/sample     0.001% of the time n samples last at 48 kHz
+  a chain of 1 gains (span handlers)           n=65536      7101.5 ns/call     0.11 ns/sample     0.001% of the time n samples last at 48 kHz
+  a chain of 8 gains (point)                   point                87.8 ns/call
+  a chain of 8 gains (span handlers)           n=64          208.2 ns/call     3.25 ns/sample     0.016% of the time n samples last at 48 kHz
+  a chain of 8 gains (span handlers)           n=480         428.4 ns/call     0.89 ns/sample     0.004% of the time n samples last at 48 kHz
+  a chain of 8 gains (span handlers)           n=4800       3422.0 ns/call     0.71 ns/sample     0.003% of the time n samples last at 48 kHz
+  a chain of 8 gains (span handlers)           n=65536     49008.5 ns/call     0.75 ns/sample     0.004% of the time n samples last at 48 kHz
+  a chain of 64 gains (point)                  point               828.1 ns/call
+  a chain of 64 gains (span handlers)          n=64         1783.3 ns/call    27.86 ns/sample     0.134% of the time n samples last at 48 kHz
+  a chain of 64 gains (span handlers)          n=480        3724.9 ns/call     7.76 ns/sample     0.037% of the time n samples last at 48 kHz
+  a chain of 64 gains (span handlers)          n=4800      28848.2 ns/call     6.01 ns/sample     0.029% of the time n samples last at 48 kHz
+  a chain of 64 gains (span handlers)          n=65536    398134.6 ns/call     6.08 ns/sample     0.029% of the time n samples last at 48 kHz
+  saw + const -> sum (point handlers only)     n=480        6237.6 ns/call    12.99 ns/sample     0.062% of the time n samples last at 48 kHz
+  saw + const -> sum (point handlers only)     n=4800      61877.9 ns/call    12.89 ns/sample     0.062% of the time n samples last at 48 kHz
+  saw + const -> sum (point handlers only)     n=65536    845768.8 ns/call    12.91 ns/sample     0.062% of the time n samples last at 48 kHz
+  a file, 480 samples over 10 ms (same density) n=480        2894.9 ns/call     6.03 ns/sample     0.029% of the time n samples last at 48 kHz
+  a file, 480 samples over 40 ms (4x sparser)  n=480        4411.8 ns/call     9.19 ns/sample     0.044% of the time n samples last at 48 kHz
+  a file, 480 samples over 2.5 ms (4x denser)  n=480        4609.9 ns/call     9.60 ns/sample     0.046% of the time n samples last at 48 kHz
+  a file, the biggest span, 1.5 s              n=65536    629654.2 ns/call     9.61 ns/sample     0.046% of the time n samples last at 48 kHz
+  the test filter, playing on (cursor)         n=480       21585.6 ns/call    44.97 ns/sample     0.216% of the time n samples last at 48 kHz
+  the test filter, playing on (cursor)         n=4800     202442.1 ns/call    42.18 ns/sample     0.202% of the time n samples last at 48 kHz
+  the test filter, a cold read at t = 2 s      point                 2.1 ms (2 s of 48 kHz samples from the start: the filter keeps no more than its checkpoints)
+
+SCALING (spans per second in all threads together, each thread with an instance of its own; this machine has 12 logical processors; "pinned": thread k runs on logical processor 2k, which on this machine is a core of its own, "free": wherever Windows puts it)
+  a chain of 8 gains, 480 samples    free    1 threads      1389574 spans/s  =  1.00x one thread  (100% of linear)
+  a chain of 8 gains, 480 samples    free    2 threads      3118473 spans/s  =  2.24x one thread  (112% of linear)
+  a chain of 8 gains, 480 samples    free    4 threads      7689190 spans/s  =  5.53x one thread  (138% of linear)
+  a chain of 8 gains, 480 samples    free    6 threads      9227660 spans/s  =  6.64x one thread  (111% of linear)
+  a chain of 8 gains, 480 samples    free    8 threads     11452581 spans/s  =  8.24x one thread  (103% of linear)
+  a chain of 8 gains, 480 samples    free   12 threads     12325671 spans/s  =  8.87x one thread  ( 74% of linear)
+  a chain of 8 gains, 4800 samples   free    1 threads       286416 spans/s  =  1.00x one thread  (100% of linear)
+  a chain of 8 gains, 4800 samples   free    2 threads       542132 spans/s  =  1.89x one thread  ( 95% of linear)
+  a chain of 8 gains, 4800 samples   free    4 threads       866537 spans/s  =  3.03x one thread  ( 76% of linear)
+  a chain of 8 gains, 4800 samples   free    6 threads      1139440 spans/s  =  3.98x one thread  ( 66% of linear)
+  a chain of 8 gains, 4800 samples   free    8 threads      1240121 spans/s  =  4.33x one thread  ( 54% of linear)
+  a chain of 8 gains, 4800 samples   free   12 threads      1502847 spans/s  =  5.25x one thread  ( 44% of linear)
+
+INSTALLS (a graph of N trios: boundary inlet -> gain -> boundary outlet = 3N nodes)
+       3 nodes: describe      0.01 ms, first install      0.01 ms, install again (all knobs moved, 8 instances)      0.01 ms, adoption by an instance     0.000 ms, collect    0.001 ms
+               memory: graph    0.00 MB (61 blocks), 8 instances    2.04 MB (33 blocks: 0.3 MB and 4 blocks each)
+      30 nodes: describe      0.01 ms, first install      0.03 ms, install again (all knobs moved, 8 instances)      0.02 ms, adoption by an instance     0.000 ms, collect    0.004 ms
+               memory: graph    0.50 MB (502 blocks), 8 instances    1.02 MB (33 blocks: 0.1 MB and 4 blocks each)
+     300 nodes: describe      0.07 ms, first install      0.25 ms, install again (all knobs moved, 8 instances)      0.15 ms, adoption by an instance     0.000 ms, collect    0.026 ms
+               memory: graph    0.72 MB (4912 blocks), 8 instances    2.01 MB (33 blocks: 0.3 MB and 4 blocks each)
+    3000 nodes: describe      0.54 ms, first install      2.36 ms, install again (all knobs moved, 8 instances)      1.85 ms, adoption by an instance     0.003 ms, collect    0.352 ms
+               memory: graph    3.95 MB (49012 blocks), 8 instances    2.19 MB (33 blocks: 0.3 MB and 4 blocks each)
+   30000 nodes: describe      5.41 ms, first install     28.66 ms, install again (all knobs moved, 8 instances)     21.27 ms, adoption by an instance     0.022 ms, collect    4.185 ms
+               memory: graph   38.38 MB (490012 blocks), 8 instances    3.66 MB (33 blocks: 0.5 MB and 4 blocks each)
+
+STALLS (calls made while another thread installs a 3000-node graph (1000 trios) again and again; the first block is the same calls with no installing)
+ with no installing:
+  boundary write                      12168406 calls  mean     0.08 us  p50     0.10  p99     0.21  p99.9     0.42  max    688.20 us
+  knob write                          12724643 calls  mean     0.06 us  p50     0.10  p99     0.10  p99.9     0.42  max    492.10 us
+  span query of 480 (through a gain)  17411990 calls  mean     0.15 us  p50     0.10  p99     0.21  p99.9     0.32  max   1188.20 us
+ while installing (1256 installs, each took mean 1.47 ms, p99 2.36 ms, max 2.63 ms):
+  boundary write                       9087229 calls  mean     0.16 us  p50     0.10  p99     0.21  p99.9     0.51  max    644.50 us
+  knob write                           9446910 calls  mean     0.15 us  p50     0.10  p99     0.10  p99.9     0.42  max    643.10 us
+  span query of 480 (through a gain)  17455771 calls  mean     0.15 us  p50     0.10  p99     0.21  p99.9     0.70  max    205.80 us
+
+PREVIEW (the null backend's audio thread, polled every 0.2 ms for 6 s: the time between two moves of the playback position is the time between two callbacks;
+         a callback asks the graph, a chain of 8 gains, for three inlets of one period each)
+  playing, nothing else going on:                        300 position moves; between two: mean  19.91 ms  p50  16.78  p99  33.55  max   32.14 ms; position advanced 6.220 s in the 6 s
+  while 100 trios (300 nodes) are installed again and again:   299 position moves; between two: mean  20.00 ms  p50  16.78  p99  33.55  max   32.23 ms; position advanced 6.220 s in the 6 s
+  while 1000 trios (3000 nodes) are installed again and again:   299 position moves; between two: mean  19.97 ms  p50  16.78  p99  33.55  max   32.51 ms; position advanced 6.220 s in the 6 s
+
+FILE (16-bit stereo, 44.1 kHz, 1 MB: 6 seconds of audio)
+  (writing the file took 0.00 s)
+  first load (with the install)       4.3 ms ( 233.8 MB/s of file), memory grew by      2.1 MB (the file is 1.0 MB: 2 channels of float32 are 2.0 MB)
+  "open" again (status 0)           0.9 ms (1082.1 MB/s), memory peak after it 2.1 MB above the start, after collect 2.1 MB
+  a span of 480 samples over 10 ms, playing on n=480        2127.3 ns/call     4.43 ns/sample     0.021% of the time n samples last at 48 kHz
+
+FILE (16-bit stereo, 44.1 kHz, 10 MB: 59 seconds of audio)
+  (writing the file took 0.01 s)
+  first load (with the install)      14.5 ms ( 691.2 MB/s of file), memory grew by     20.1 MB (the file is 10.0 MB: 2 channels of float32 are 20.0 MB)
+  "open" again (status 0)          12.5 ms ( 797.6 MB/s), memory peak after it 20.1 MB above the start, after collect 20.1 MB
+  a span of 480 samples over 10 ms, playing on n=480        2118.8 ns/call     4.41 ns/sample     0.021% of the time n samples last at 48 kHz
+
+FILE (16-bit stereo, 44.1 kHz, 100 MB: 594 seconds of audio)
+  (writing the file took 0.10 s)
+  first load (with the install)      96.6 ms (1035.3 MB/s of file), memory grew by    200.4 MB (the file is 100.0 MB: 2 channels of float32 are 200.0 MB)
+  "open" again (status 0)         103.7 ms ( 964.6 MB/s), memory peak after it 200.4 MB above the start, after collect 200.4 MB
+  a span of 480 samples over 10 ms, playing on n=480        2239.6 ns/call     4.67 ns/sample     0.022% of the time n samples last at 48 kHz
+
+DEEP CHAINS (a chain of N gains, each asked once as a point and as spans of 64 and 65536; one process for each try; 0xc00000fd is a stack overflow)
+  main     depth     100: ok                                     answered: point 7.88861e-31 (a chain of 100 halvings: 0), spans ok
+  main     depth     500: ok                                     answered: point 0 (a chain of 500 halvings: 0), spans ok
+  main     depth    1000: ok                                     answered: point 0 (a chain of 1000 halvings: 0), spans ok
+  main     depth    1500: ok                                     answered: point 0 (a chain of 1500 halvings: 0), spans ok
+  main     depth    2000: ok                                     answered: point 0 (a chain of 2000 halvings: 0), spans ok
+  main     depth    2500: ok                                     answered: point 0 (a chain of 2500 halvings: 0), spans ok
+  main     depth    3000: ended with exit code 0xc00000fd        installed 3000 gains
+  main     the deepest chain that was answered of those tried: 2500
+  worker   depth     100: ok                                     answered: point 7.88861e-31 (a chain of 100 halvings: 0), spans ok
+  worker   depth     500: ok                                     answered: point 0 (a chain of 500 halvings: 0), spans ok
+  worker   depth    1000: ok                                     answered: point 0 (a chain of 1000 halvings: 0), spans ok
+  worker   depth    1500: ok                                     answered: point 0 (a chain of 1500 halvings: 0), spans ok
+  worker   depth    2000: ok                                     answered: point 0 (a chain of 2000 halvings: 0), spans ok
+  worker   depth    2500: ok                                     answered: point 0 (a chain of 2500 halvings: 0), spans ok
+  worker   depth    3000: ended with exit code 0xc00000fd        installed 3000 gains
+  worker   the deepest chain that was answered of those tried: 2500
+  preview  depth     100: ok                                     the preview played on: position moved by 1.560 s
+  preview  depth     500: ok                                     the preview played on: position moved by 1.560 s
+  preview  depth    1000: ok                                     the preview played on: position moved by 1.560 s
+  preview  depth    1500: ok                                     the preview played on: position moved by 1.540 s
+  preview  depth    2000: ok                                     the preview played on: position moved by 1.540 s
+  preview  depth    2500: ok                                     the preview played on: position moved by 1.560 s
+  preview  depth    3000: ended with exit code 0xc00000fd        installed 3000 gains with a preview
+  preview  the deepest chain that was answered of those tried: 2500
+
+
+
+====================================================================================================
+4. INSTALLS again, with the memory of an instance (`bench.exe installs`, after the instance-memory part was added)
+====================================================================================================
+﻿INSTALLS (a graph of N trios: boundary inlet -> gain -> boundary outlet = 3N nodes)
+       3 nodes: describe      0.01 ms, first install      0.01 ms, install again (all knobs moved, 8 instances)      0.01 ms, adoption by an instance     0.000 ms, collect    0.001 ms
+               memory: graph    0.00 MB (61 blocks), 8 instances    2.04 MB (33 blocks: 0.3 MB and 4 blocks each)
+      30 nodes: describe      0.01 ms, first install      0.03 ms, install again (all knobs moved, 8 instances)      0.02 ms, adoption by an instance     0.000 ms, collect    0.004 ms
+               memory: graph    0.50 MB (502 blocks), 8 instances    1.02 MB (33 blocks: 0.1 MB and 4 blocks each)
+     300 nodes: describe      0.07 ms, first install      0.24 ms, install again (all knobs moved, 8 instances)      0.17 ms, adoption by an instance     0.000 ms, collect    0.032 ms
+               memory: graph    0.72 MB (4912 blocks), 8 instances    2.01 MB (33 blocks: 0.3 MB and 4 blocks each)
+    3000 nodes: describe      0.54 ms, first install      2.58 ms, install again (all knobs moved, 8 instances)      1.64 ms, adoption by an instance     0.003 ms, collect    0.352 ms
+               memory: graph    3.95 MB (49012 blocks), 8 instances    2.20 MB (33 blocks: 0.3 MB and 4 blocks each)
+   30000 nodes: describe      5.18 ms, first install     29.81 ms, install again (all knobs moved, 8 instances)     21.00 ms, adoption by an instance     0.023 ms, collect    4.266 ms
+               memory: graph   38.38 MB (490012 blocks), 8 instances    3.66 MB (33 blocks: 0.5 MB and 4 blocks each)
+INSTANCE MEMORY (a chain of N gains: the floats of the scratch arena the instance gets, canopy_instance_arena_floats, and what 16 instances add to the process)
+  chain of   1 gains: arena      65536 floats =    0.25 MB per instance; 16 instances added    3.62 MB to the process (0.23 MB each) and 65 blocks
+  chain of   8 gains: arena     524288 floats =    2.00 MB per instance; 16 instances added   32.13 MB to the process (2.01 MB each) and 65 blocks
+  chain of  64 gains: arena    4194304 floats =   16.00 MB per instance; 16 instances added  256.57 MB to the process (16.04 MB each) and 65 blocks
+  chain of 512 gains: arena   33554432 floats =  128.00 MB per instance; 16 instances added 2052.08 MB to the process (128.26 MB each) and 65 blocks
+
+
+====================================================================================================
+5. PYTHON: the bridge and the editor (`python dev/measure.py bridge editor`)
+====================================================================================================
+﻿machine: 12 logical processors, win32, Python 3.11.9
+
+BRIDGE (Python 3.11.9; one thread unless said otherwise; the best of three rounds)
+  Instance.value (a point query of a boundary outlet)             1.00 us/call
+  Instance.audio, a span of     1 samples                           2.05 us/call =  2052.32 ns/sample (the memoryview included)
+  Instance.audio, a span of    64 samples                           2.05 us/call =    32.10 ns/sample (the memoryview included)
+  Instance.audio, a span of   480 samples                           2.36 us/call =     4.92 ns/sample (the memoryview included)
+  Instance.audio, a span of  4800 samples                           3.04 us/call =     0.63 ns/sample (the memoryview included)
+  Instance.audio, a span of 65536 samples                         144.25 us/call =     2.20 ns/sample (the memoryview included)
+  Engine.set_boundary                                             0.73 us/call
+  Engine.boundary_nodes (2 nodes)                                 3.42 us/call
+  Engine.collect                                                  0.20 us/call
+  Engine.update (4 nodes, nothing changed)                        9.63 us/call
+  canopysynth.ns_to_frame (the Python helper)                     0.23 us/call
+  1 thread(s) asking spans of 4800 samples:     326194 spans/s = 1.00x one thread
+  2 thread(s) asking spans of 4800 samples:     266468 spans/s = 0.82x one thread
+  4 thread(s) asking spans of 4800 samples:     270096 spans/s = 0.83x one thread
+  8 thread(s) asking spans of 4800 samples:     269903 spans/s = 0.83x one thread
+  spans that cost the engine something (65536 samples of a 4 MB WAV file, about 0.3 ms of C each: the GIL is let go during it):
+  1 thread(s) asking spans of 65536 samples of a file:     2329 spans/s = 1.00x one thread
+  2 thread(s) asking spans of 65536 samples of a file:     5809 spans/s = 2.49x one thread
+  4 thread(s) asking spans of 65536 samples of a file:    11091 spans/s = 4.76x one thread
+  8 thread(s) asking spans of 65536 samples of a file:    14966 spans/s = 6.43x one thread
+  building, compiling and saving a graph of N boundary nodes (N/2 inlets, each wired to an outlet):
+       10 nodes: build the Graph     0.09 ms (with loop protection off while building:    0.06 ms), Engine(graph)     0.11 ms, update() again     0.05 ms, boundary_nodes    0.06 ms, to_dict    0.02 ms, from_dict     0.10 ms
+      100 nodes: build the Graph     0.39 ms (with loop protection off while building:    0.29 ms), Engine(graph)     0.44 ms, update() again     0.36 ms, boundary_nodes    0.17 ms, to_dict    0.11 ms, from_dict     0.46 ms
+     1000 nodes: build the Graph    14.56 ms (with loop protection off while building:    2.81 ms), Engine(graph)     3.93 ms, update() again     3.87 ms, boundary_nodes    1.62 ms, to_dict    0.88 ms, from_dict     4.56 ms
+     3000 nodes: build the Graph   147.82 ms (with loop protection off while building:    8.12 ms), Engine(graph)    11.71 ms, update() again    11.18 ms, boundary_nodes    4.72 ms, to_dict    5.19 ms, from_dict    12.52 ms
+
+EDITOR (an off-screen 900 x 640 window; one engine linked, null audio; the best of several rounds)
+    10 nodes: a full redraw     5.01 ms, an edit that recompiles (add a node, with the redraw)     5.62 ms, the timer's poll (every 100 ms)   0.001 ms
+    50 nodes: a full redraw    11.60 ms, an edit that recompiles (add a node, with the redraw)    12.84 ms, the timer's poll (every 100 ms)   0.004 ms
+   200 nodes: a full redraw    34.34 ms, an edit that recompiles (add a node, with the redraw)    36.91 ms, the timer's poll (every 100 ms)   0.014 ms
+   500 nodes: a full redraw    46.98 ms, an edit that recompiles (add a node, with the redraw)    52.22 ms, the timer's poll (every 100 ms)   0.034 ms
+
+
+
+====================================================================================================
+6. THE REAL AUDIO DEVICE, playing silence (`python dev/measure.py device`)
+====================================================================================================
+﻿machine: 12 logical processors, win32, Python 3.11.9
+
+(this opens the machine's real default audio device and plays silence)
+DEVICE (the machine's real audio system, the system default device; the graph plays silence: the preview's inlets are knobs at 0). A thread presses the
+        button; this one writes a boundary value every 100 us meanwhile and records how long each write took.
+  press "play  ": the call took   43.64 ms (status 0);    6 boundary writes meanwhile, the slowest   43.61 ms; afterwards playing=1, position 0.380 s
+  press "pause ": the call took    0.00 ms (status 0);    1 boundary writes meanwhile, the slowest    0.00 ms; afterwards playing=0, position 0.380 s
+  press "play  ": the call took    0.00 ms (status 0);    1 boundary writes meanwhile, the slowest    0.00 ms; afterwards playing=1, position 0.700 s
+  press "device": the call took    0.00 ms (status 0);    1 boundary writes meanwhile, the slowest    0.00 ms; afterwards playing=1, position 1.000 s
+  press "pause ": the call took    0.00 ms (status 0);    1 boundary writes meanwhile, the slowest    0.00 ms; afterwards playing=0, position 1.000 s
+  press "play  ": the call took    0.00 ms (status 0);    1 boundary writes meanwhile, the slowest    0.00 ms; afterwards playing=1, position 1.320 s
+  press "pause ": the call took    0.00 ms (status 0);    1 boundary writes meanwhile, the slowest    0.00 ms; afterwards playing=0, position 1.320 s
+  freeing the engine (the device is closed with it) took 55.45 ms
+
+
