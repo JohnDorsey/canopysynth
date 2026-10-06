@@ -8,6 +8,7 @@ What a Graph guarantees at every moment: every node has a known type; every sett
 (fan-in is impossible); and, while `loop_protection` is on, no loop. What it leaves to the engine's compile (as design section 16 says):
 boundary names that are empty or used twice (a graph being edited may pass through such a state; `validate()` reports it)."""
 import copy
+import weakref
 from collections import namedtuple
 from types import MappingProxyType
 
@@ -147,10 +148,16 @@ class Graph:
         self._links = {}                    # (to node ID, inlet key) -> (from node ID, outlet key)
         self._next_id = 1
         self._loop_protection = True
+        self._engines = weakref.WeakSet()           # the Engines made over this graph (see `engines`)
 
     @property
     def types(self):
         return self._types
+
+    def engines(self):
+        """The open Engines made over this Graph (`Engine(graph)`), as a list. An editor of the graph keeps them up to date: it recompiles after
+        every edit that changes what an engine compiles, moves knobs live and sends buttons to them (design section 15)."""
+        return [engine for engine in self._engines if not engine.closed]
 
     # ---- loop protection ----
 

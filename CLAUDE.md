@@ -16,17 +16,26 @@ python run_tests.py -k build        # only Python tests whose name contains the 
 python run_tests.py --no-build      # skip the build
 python run_tests.py --no-debug      # skip the second, debug-heap run of the C tests
 python run_tests.py --no-asan       # skip the third, AddressSanitizer run of the C tests
+python run_tests.py --no-c          # skip the C tests altogether (for a run after a change to a Python file, which cannot change what they say)
+python run_tests.py --fail-fast     # stop at the first failing test, and skip the C programs after a failing one; with --record-times FILE (write how long
+                                    # each Python test took) and --order-by-times FILE (cheapest first by those times) it is what the mutation check runs
 powershell -ExecutionPolicy Bypass -File build.ps1    # only the build
 python dev/mutation/mutate.py dev/mutation/step3.py   # mutation check: breaks the C code in 83 specific ways, one at a time, and requires the
-                                                      # suite to notice each (about 15 s each; add a spec file per step; step4.py has 134, step5.py 53, step6.py 64,
-                                                      # step7.py 142, step8.py 141, step9.py 76, step10.py 120: step8.py, step10.py and most of step9.py break Python files, for which
-                                                      # the runner skips the build and the two extra C runs; a run that crashes without a total is "caught")
+                                                      # suite to notice each (add a spec file per step; step4.py has 134, step5.py 53, step6.py 64,
+                                                      # step7.py 142, step8.py 141, step9.py 76, step10.py 113, step11.py 178, step11b.py 39, step12.py 112,
+                                                      # step12b.py 26, runner.py 75 (the two runners themselves), known.py 4 (two survivors and two
+                                                      # detections, to check the runner): step8.py (but for 9 of its faults), most of step9.py and every spec from step10.py on break Python files,
+                                                      # for which the runner skips the build and the C tests, and a spec with AREAS = [...] (step11.py) runs only those
+                                                      # Python test files; a run that crashes without a total is "caught"; the exit code is 0 only if every mutation was caught)
+                                                      # Each run is a fast one: it stops at the first failing test, runs the cheapest tests first (by the times the
+                                                      # campaign's first, whole run recorded) and after a mutation of a Python file leaves out the C tests; none of that can
+                                                      # turn a survivor into a detection (see mutate.py). Add --thorough for the old way: every test of every run.
 python dev/mutation/mutate.py dev/mutation/step4.py N01 P30  # only the mutations whose first word is one of these (here N01 and P30)
                                                       # (a mutation that deadlocks, like the lock ones K01 to K06, is stopped by the runner after
                                                       # CANOPY_TEST_TIMEOUT seconds, default 180: set it to 30 for such a run)
 python dev/listen_check.py --list                     # the audio devices of this machine; without --list: the listening check of plan step 7 (needs a person
                                                       # with ears: it plays test tones through the real preview node; --auto --backend null runs it silently)
-python dev/editor_check.py                            # the real-window check of the editor (plan step 10): a visible window driven by synthetic mouse events
+python dev/editor_check.py                            # the real-window check of the editor (plan steps 10 and 11): a visible window driven by synthetic mouse events
                                                       # (--try leaves it open to use by hand; --offscreen --fast is what the tests run; --screenshot F.png)
 ```
 
@@ -50,7 +59,7 @@ python dev/editor_check.py                            # the real-window check of
     node types a graph may name, read from a registry, and the migrations by type version), `_values.py` (checks of settings, knobs, positions),
     `graph.py` (the graph model: `Graph`, `Node`, `Port`, `to_dict` / `from_dict`), `_native.py` (the DLL with every function's types declared and
     the status codes), `engine.py` (the bridge: `Engine`, `Instance`; `QueryError` is in `errors.py`), `editor/` (the node editor: `theme.py` colours and sizes,
-    `geometry.py` view, layout, hit testing and shapes with no Tk in it, `canvas.py` the `Editor` Frame; `canopysynth.Editor` is imported when first
+    `geometry.py` view, layout of nodes, ports, knobs and widgets, hit testing and shapes with no Tk in it, `canvas.py` the `Editor` Frame; `canopysynth.Editor` is imported when first
     used, so that importing the package does not load tkinter). Importing the package does not load the DLL;
     the first `Graph()` or `Engine()` does.
   - `tests/c/` plain C: `ctest.h` (`CHECK`, `CHECK_INT`, `CHECK_HEAP`, `RUN`), `support.c/.h` (guarded output buffers, the `test.*` node types, the `Rig`
@@ -59,8 +68,22 @@ python dev/editor_check.py                            # the real-window check of
     `graph_dll.py` builds a catalog of Python, built-in and hidden test types and converts a `Graph` into the C description to compile it in a real
     engine; `fixtures/graph_v1.json` is the hand-written version 1 file the saved format is pinned by (a format change must keep it loading);
     `test_editor_geometry.py` tests the editor's geometry, `test_editor.py` the widget in a real tkinter window placed at +6000+6000 (a withdrawn
-    window gets no synthetic events; an off-screen one does, and nothing flashes) driven with `event_generate`. `python run_tests.py editor` runs only
-    test_editor.py: use `editor_geometry` for the other file.
+    window gets no synthetic events; an off-screen one does, and nothing flashes) driven with `event_generate`, and `test_editor_controls.py` its knobs,
+    widgets and menus (node types written as descriptor dicts there, no DLL rig), `test_editor_selection.py` rectangle selection and moving a selection, `test_editor_link.py` the editor with an Engine over the same graph
+    (null audio), `test_editor_time.py` the hh:mm:ss.mmm text, `test_engine_controls.py` the Engine calls the editor uses, `test_runner.py` the test
+    runner and the mutation runner themselves (a copy of run_tests.py in a throwaway project, and stubs for the programs and for `subprocess.run`).
+    `python run_tests.py editor` runs only test_editor.py: use `editor_geometry`, `editor_controls` and `editor_selection` for the others. Tk gives every generated event the time 0, so two presses at one spot are a double click
+    however far apart: the tests' `send` and the check script's `event` give each event a time of its own (a double-click test passes close times). The
+    editor finds double clicks itself from the events' times (500 ms, 5 pixels), never through Tk's `<Double-...>` bindings, which proved unreliable.
+  - A mutation campaign changes the project's own source files while it runs, so each campaign runs in a copy of the project of its own (`robocopy` the
+    folder without `.git` and `__pycache__` and without a renamed `*.build*-in-use` DLL, run `mutate.py` there with `CANOPY_TEST_TIMEOUT=150`, log to a file),
+    not more than four at a time (each starts with a whole run of the suite), started about 75 s apart; and the machine must stay awake: call
+    `request_keep_awake` with `session_idle` before waiting between turns (a sleeping machine killed the processes silently). A spec whose `old` text is no
+    longer in its file is SKIPPED, which `mutate.py` reports and answers with exit code 1: the code moved, so the spec needs a new anchor (the runner
+    cannot see that from a green total). The runner builds again before a mutation of a Python file that follows one of a C file. A log written with
+    PowerShell's `*>` is UTF-16 here: read it with `Get-Content` (or decode it as `utf-16`); `grep` and `tail | grep` find nothing in it.
+  - A running `python dev/editor_check.py --try` window keeps `canopysynth/canopysynth.dll` open, and the linker then cannot overwrite it: a loaded DLL
+    can be renamed (`canopysynth.dll.build13-in-use` was, at step 11, and `build16-in-use` at build 17), after which the build writes a fresh one. Close the window and delete the old file.
   - `dev/mutation/` the mutation check; `docs/`; `build/` (generated).
 - Test names are unique: C tests start with `test_c_`, Python tests with `test_py_`.
 - Delivery counter: `CANOPYSYNTH_BUILD`, bumped by exactly 1 once per finished prompt that changed code. It lives in `src/canopy.h` and

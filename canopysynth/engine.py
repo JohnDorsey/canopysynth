@@ -2,6 +2,7 @@
 
     engine = canopysynth.Engine(graph)      # compiles the graph and installs it; GraphError (with the engine's reason) if it cannot
     engine.set_boundary("intensity", 0.7)   # any thread
+    engine.action(node_id, "play")          # a button of a node (the editor does this for its buttons); also set_knob, node_message, preview_state...
     inst = engine.new_instance()            # one per querying thread
     inst.value("song_left", t_ns)           # a point query: a float
     inst.audio("song_left", t0, t1, n)      # a span query: a memoryview of n float32 (QueryError on a nonzero status)
@@ -95,16 +96,45 @@ class Engine:
         except BaseException:
             self.close()
             raise
+        graph._engines.add(self)                           # an editor of this graph finds the engine through it and keeps it up to date
 
     @property
     def graph(self):
         """The Graph this engine compiles."""
         return self._graph
 
+    @property
+    def closed(self):
+        """True once `close` has run."""
+        return self._engine is None
+
     def _handle(self):
         if self._engine is None:
             raise RuntimeError("the engine is closed")
         return self._engine
+
+    def _node_status(self, status, node_id, what):
+        """Turns the status of a call about one node into an exception (GraphError: the installed graph may be older than the edited one)."""
+        if status == native.OK:
+            return
+        if status == native.ERR_NODE:
+            raise GraphError(f"the installed graph has no node {node_id} (it may be older than the one edited: see the last compile error)")
+        if status == native.ERR_PORT:
+            raise GraphError(f"the installed graph's node {node_id} has no such inlet")
+        if status == native.ERR_ARGUMENT:
+            raise GraphError(f"{what}: node {node_id} cannot do that ({native.message(status)})")
+        raise GraphError(f"{what}: {native.message(status)}")
+
+    def _text(self, function, *args):
+        """Calls a C function that copies text into (buffer, capacity, &length) after `args`, asking again with a bigger buffer if it was cut; returns
+        (status, the text)."""
+        capacity = 256
+        while True:
+            buffer, length = ctypes.create_string_buffer(capacity), ctypes.c_int32()
+            status = function(*args, buffer, capacity, ctypes.byref(length))
+            if status != native.OK or length.value < capacity:
+                return status, buffer.value.decode("utf-8", "replace")
+            capacity = length.value + 1
 
     def _free_registry(self):
         if self._own_registry and self._registry:
@@ -132,6 +162,68 @@ class Engine:
                     raise GraphError(reason.decode("utf-8", "replace") if reason else native.message(status))
             finally:
                 lib.canopy_graph_free(c_graph)
+
+    def set_knob(self, node_id, inlet_key, value):
+        """Moves the knob of an inlet of the installed graph (an atomic store: queries that start later see it, from any thread, and nothing is
+        recompiled). `value` is -1 to 1. GraphError if the Graph has no such node or inlet, or the installed graph is older and lacks the node;
+        ValueError for a value that is not a number from -1 to 1."""
+        handle = self._handle()
+        node = self._graph.node(node_id)
+        if not isinstance(inlet_key, str) or inlet_key not in node.info.inlet:
+            raise GraphError(f"node {node_id} has no inlet {inlet_key!r}")
+        if not _values.is_number(value) or not -1 <= value <= 1:
+            raise ValueError(f"a knob position is a number from -1 to 1, not {value!r}")
+        self._node_status(self._lib.canopy_engine_set_knob(handle, node_id, node.info.inlet_index[inlet_key], float(value)), node_id, "set_knob")
+
+    def action(self, node_id, action):
+        """A button of a node was pressed: calls the node type's action handler with this name ("open" of the file node; "play", "pause" and
+        "device" of the preview node). GraphError if the installed graph has no such node."""
+        raw = action.encode("utf-8")
+        self._node_status(self._lib.canopy_engine_action(self._handle(), node_id, raw), node_id, f"action {action!r}")
+
+    def node_message(self, node_id):
+        """What a node of the installed graph last said about itself ("file not found: ...", a device that cannot be opened); "" for nothing."""
+        status, text = self._text(self._lib.canopy_engine_node_message, self._handle(), node_id)
+        self._node_status(status, node_id, "node_message")
+        return text
+
+    def collect(self):
+        """Frees what the engine no longer needs (old compiled graphs no instance uses, the shared resources of deleted nodes: the device of a deleted
+        preview node is closed). Returns the number of compiled graphs still held."""
+        return self._lib.canopy_engine_collect(self._handle())
+
+    def set_audio_backend(self, backend):
+        """Chooses the audio system the preview nodes open devices in: "system" (the default: the operating system's) or "null" (no sound hardware: the
+        audio is taken in real time and played nowhere; for tests and hosts without a sound card). Takes effect for devices opened afterwards."""
+        if backend not in native.AUDIO_BACKENDS:
+            raise ValueError(f"the audio backend is 'system' or 'null', not {backend!r}")
+        status = self._lib.canopy_engine_set_audio_backend(self._handle(), native.AUDIO_BACKENDS[backend])
+        if status != native.OK:
+            raise RuntimeError(native.message(status))
+
+    def audio_devices(self):
+        """The names of the playback devices the machine has now, as a list (empty for none). It takes a moment: ask when a list is wanted."""
+        status, text = self._text(self._lib.canopy_engine_audio_devices, self._handle())
+        if status != native.OK:
+            raise RuntimeError(native.message(status))
+        return text.split("\n") if text else []
+
+    def preview_state(self, node_id):
+        """(playing, time_ns) of a realtime preview node of the installed graph: playing is a bool, time_ns the playback time in nanoseconds."""
+        playing, time_ns = ctypes.c_int32(), ctypes.c_int64()
+        self._node_status(self._lib.canopy_preview_state(self._handle(), node_id, ctypes.byref(playing), ctypes.byref(time_ns)), node_id, "preview_state")
+        return bool(playing.value), time_ns.value
+
+    def preview_set_time(self, node_id, time_ns):
+        """Moves the playback time of a realtime preview node (nanoseconds, any value; rounded to a frame of 48000 Hz)."""
+        self._node_status(self._lib.canopy_preview_set_time(self._handle(), node_id, _time(time_ns, "time_ns")), node_id, "preview_set_time")
+
+    def preview_warning(self, node_id):
+        """The warning of design section 9 for a realtime preview node: the nodes that feed it and are not flagged realtime safe, as a sentence; ""
+        when there are none."""
+        status, text = self._text(self._lib.canopy_preview_warning, self._handle(), node_id)
+        self._node_status(status, node_id, "preview_warning")
+        return text
 
     def boundary_nodes(self):
         """The boundary nodes of the installed graph as BoundaryInfo(name, kind, node_id), sorted by name."""

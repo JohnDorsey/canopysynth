@@ -105,7 +105,7 @@ file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used
 
 - Every inlet has an associated knob.
 - A node type may declare a default knob position for each inlet; an inlet with no declared default starts at 0.
-- If the inlet has a connection, the knob is grayed out.
+- If the inlet has a connection, its knob is not shown (the knob keeps its position and comes back when the connection is removed).
 - If the inlet has no connection, the knob is interactive, and any query the node makes through that inlet simply returns the knob's float32
   position, between -1 and 1, ignoring `t` (or `t0` and `t1`). A span query on an unconnected inlet returns that value for all `n` samples.
 - Each node maps the -1..1 knob position to whatever real unit it needs (Hz, dB...). In version 1 a knob displays its raw -1..1 value;

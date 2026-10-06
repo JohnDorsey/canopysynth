@@ -11,6 +11,7 @@ OK, ERR_OVERFLOW, ERR_N, ERR_MEMORY, ERR_GRAPH, ERR_NODE, ERR_PORT, ERR_ARGUMENT
 ERR_INDEX = 4
 MAX_N = 65536
 BOUNDARY_KINDS = {0: "inlet", 1: "outlet"}              # CANOPY_BOUNDARY_INLET, CANOPY_BOUNDARY_OUTLET
+AUDIO_BACKENDS = {"system": 0, "null": 1}               # CANOPY_AUDIO_SYSTEM, CANOPY_AUDIO_NULL
 INT64_MIN, INT64_MAX = -2 ** 63, 2 ** 63 - 1
 
 _vp, _i32, _i64, _f32, _f64, _str = ctypes.c_void_p, ctypes.c_int32, ctypes.c_int64, ctypes.c_float, ctypes.c_double, ctypes.c_char_p
@@ -35,6 +36,15 @@ _SIGNATURES = [
     ("canopy_engine_set_boundary", _i32, [_vp, _str, _f32]),
     ("canopy_engine_boundary_count", _i32, [_vp]),
     ("canopy_engine_boundary_at", _i32, [_vp, _i32, ctypes.c_char_p, _i32, _p_i32, _p_i32, _p_i64]),
+    ("canopy_engine_collect", _i32, [_vp]),
+    ("canopy_engine_set_knob", _i32, [_vp, _i64, _i32, _f32]),
+    ("canopy_engine_action", _i32, [_vp, _i64, _str]),
+    ("canopy_engine_node_message", _i32, [_vp, _i64, ctypes.c_char_p, _i32, _p_i32]),
+    ("canopy_engine_set_audio_backend", _i32, [_vp, _i32]),
+    ("canopy_engine_audio_devices", _i32, [_vp, ctypes.c_char_p, _i32, _p_i32]),
+    ("canopy_preview_state", _i32, [_vp, _i64, _p_i32, _p_i64]),
+    ("canopy_preview_set_time", _i32, [_vp, _i64, _i64]),
+    ("canopy_preview_warning", _i32, [_vp, _i64, ctypes.c_char_p, _i32, _p_i32]),
     ("canopy_engine_new_instance", _vp, [_vp]),
     ("canopy_instance_free", None, [_vp]),
     ("canopy_instance_read_at", _i32, [_vp, _str, _i64, _p_float]),

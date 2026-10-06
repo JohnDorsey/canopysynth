@@ -63,7 +63,7 @@ MUTATIONS = [
     ("G08 inlet() accepts any key", G, '        if not isinstance(key, str) or key not in self._info.inlet:', '        if False:'),
     ("G09 outlet() accepts any key", G, '        if not isinstance(key, str) or key not in self._info.outlet:', '        if False:'),
     # ---- the graph: loops ----
-    ("G10 loop protection starts off", G, '        self._loop_protection = True\n\n    @property\n    def types', '        self._loop_protection = False\n\n    @property\n    def types'),
+    ("G10 loop protection starts off", G, '        self._loop_protection = True\n        self._engines', '        self._loop_protection = False\n        self._engines'),
     ("G11 loop_protection takes anything", G, '        if not isinstance(value, bool):\n            raise GraphError(f"loop_protection must be True or False', '        if False:\n            raise GraphError(f"loop_protection must be True or False'),
     ("G12 protection can be turned on over a loop", G, '        if value and self.has_loop():', '        if False:'),
     ("G13 a node leading to itself is no loop", G, '            if here == goal:\n                return True', '            if here == goal and here != start:\n                return True'),

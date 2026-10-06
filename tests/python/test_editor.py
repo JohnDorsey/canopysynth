@@ -40,7 +40,14 @@ def window(graph, width=700, height=450):
         root.destroy()
 
 
+_clock = [1000]
+
+
 def send(editor, sequence, x, y, **options):
+    """Generates a mouse event at screen point (x, y) of the editor's canvas. Tk gives generated events the time 0, which makes any two presses at one
+    spot a double click (however long between them), so every event gets a time of its own, a second after the last, unless the test passes `time`."""
+    _clock[0] += 1000
+    options.setdefault("time", _clock[0])
     editor.canvas.event_generate(sequence, x=int(round(x)), y=int(round(y)), **options)
     editor.update()
 
@@ -140,12 +147,23 @@ def test_py_the_editor_draws_every_node_port_title_and_wire_in_the_look_of_the_m
         one(editor, f"wire:{nodes['out'].id}:in")
         assert canvas.itemcget(one(editor, "title:" + str(nodes["file"].id)), "text") == "File read"
         assert canvas.itemcget(one(editor, "title:" + str(nodes["file"].id)), "fill") == theme.TITLE_TEXT_BUILTIN
-        assert items(editor, f"bar:{nodes['file'].id}") == ()                                             # a built-in node has no title bar
+        assert items(editor, f"bar:{nodes['file'].id}") == ()                                             # a built-in node's bar is uncoloured: no bar item...
+        rule = canvas.coords(one(editor, f"rule:{nodes['file'].id}"))                                     # ...but a thin off-white line under the title, short of both edges
+        box = editor.box(nodes["file"])
+        sx0, sy = editor.view.to_screen(box.x + theme.TITLE_RULE_INSET, box.y + box.bar)
+        sx1, _ = editor.view.to_screen(box.x + box.w - theme.TITLE_RULE_INSET, box.y + box.bar)
+        assert [round(v, 6) for v in rule] == [round(sx0, 6), round(sy, 6), round(sx1, 6), round(sy, 6)] and theme.TITLE_RULE_INSET > 0
+        assert canvas.itemcget(one(editor, f"rule:{nodes['file'].id}"), "fill") == theme.TITLE_RULE and items(editor, f"rule:{nodes['safe'].id}") == ()
         assert canvas.itemcget(one(editor, f"title:{nodes['safe'].id}"), "text") == "Safe"
         assert canvas.itemcget(one(editor, f"title:{nodes['safe'].id}"), "fill") == theme.TITLE_BAR_TEXT
         assert canvas.itemcget(one(editor, f"bar:{nodes['safe'].id}"), "fill") == theme.TITLE_BAR_REALTIME_SAFE
         assert canvas.itemcget(one(editor, f"bar:{nodes['slow'].id}"), "fill") == theme.TITLE_BAR_NOT_REALTIME_SAFE
         assert theme.TITLE_BAR_REALTIME_SAFE != theme.TITLE_BAR_NOT_REALTIME_SAFE
+        for key in ("file", "safe"):                                                                          # every title starts a little in from the node's left, in the middle of the bar
+            box = editor.box(nodes[key])
+            sx, sy = editor.view.to_screen(box.x + theme.TITLE_TEXT_X, box.y + box.bar / 2)
+            title = canvas.coords(one(editor, f"title:{nodes[key].id}"))
+            assert abs(title[0] - sx) < 0.01 and abs(title[1] - sy) < 0.01 and canvas.itemcget(one(editor, f"title:{nodes[key].id}"), "anchor") == "w"
         assert canvas.itemcget(one(editor, f"body:{nodes['file'].id}"), "fill") == theme.NODE_FILL
         assert canvas.cget("background") == theme.BACKGROUND
         everything = canvas.find_all()                                                                        # wires are behind every node
@@ -328,9 +346,8 @@ def test_py_dragging_a_node_moves_it_selects_it_brings_it_to_the_front_and_repor
         grab = at(editor, title.x + 20, title.y + 10)
         drag(editor, grab, (grab[0] - 30, grab[1] + 30))
         assert (nodes["slow"].x, nodes["slow"].y) == (220, 230)
-        built_in = editor.box(nodes["out"])                                                                    # and a built-in node by the title above its body
-        strip = built_in.title_strip()
-        grab = at(editor, strip[0] + 5, strip[1] + 5)
+        built_in = editor.box(nodes["out"])                                                                    # and a built-in node by its (uncoloured) title bar
+        grab = at(editor, built_in.x + 5, built_in.y + 5)
         drag(editor, grab, (grab[0] + 10, grab[1] + 10))
         assert (nodes["out"].x, nodes["out"].y) == (510, 50)
         assert [n.type for n in graph.nodes()].count("file_read") == 1 and graph.connections()[0].outlet.node is nodes["file"]
@@ -478,7 +495,8 @@ def test_py_the_add_menu_lists_built_in_types_first_then_third_party_ones_and_hi
         labels = []
         for index in range(menu.index("end") + 1):
             labels.append("---" if menu.type(index) == "separator" else menu.entrycget(index, "label"))
-        assert labels == ["Boundary inlet", "Boundary outlet", "File read", "Realtime preview", "---", "Safe", "Slow  (not realtime safe)"], labels
+        assert labels == ["Boundary inlet", "Boundary outlet", "File read", "Realtime preview", "---", "Safe", "Slow  (not realtime safe)",
+                          "---", "Loop protection"], labels
         assert "test_filter" not in "".join(labels) and "Test filter" not in "".join(labels)
 
 
@@ -502,9 +520,39 @@ def test_py_choosing_an_entry_of_the_add_menu_adds_a_node_at_the_clicked_world_p
         one(editor, f"body:{node.id}")
         menu.invoke(labels.index("Safe") + 1)                                                                   # (the separator is entry 4)
         assert graph.nodes()[-1].type == "vendor.safe"
-        box = editor.box(nodes["file"])                                                                         # a right click on a node opens no menu
+        box = editor.box(nodes["file"])                                                                         # a right click on a node opens the node's menu
         send(editor, "<ButtonPress-3>", *at(editor, box.x + 20, box.y + 20))
-        assert len(popups) == 1
+        assert len(popups) == 2 and popups[1][0].entrycget(0, "label") == "Delete" and editor.selected == nodes["file"].id
+
+
+def test_py_a_boundary_node_added_from_the_menu_is_named_default0_default1_and_so_on_with_the_first_name_no_boundary_node_has():
+    with sample() as (editor, graph, nodes):                                                                    # boundary nodes "out" (an outlet) and "level" (an inlet)
+        popups = []
+        editor._popup = lambda menu, x_root, y_root: popups.append(menu)
+        send(editor, "<ButtonPress-3>", 600, 400)
+        menu = popups[0]
+        labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
+        inlet, outlet, preview = (labels.index(label) for label in ("Boundary inlet", "Boundary outlet", "Realtime preview"))     # (built-in types: the entries before the separator)
+        menu.invoke(inlet)
+        menu.invoke(outlet)
+        menu.invoke(inlet)
+        first, second, third = graph.nodes()[-3:]
+        assert [(n.type, n.settings["name"]) for n in (first, second, third)] == [
+            ("boundary_inlet", "default0"), ("boundary_outlet", "default1"), ("boundary_inlet", "default2")]       # one numbering for both kinds
+        graph.validate()                                                                                          # (raises if a name is empty or used twice)
+        menu.invoke(preview)
+        assert "name" not in graph.nodes()[-1].settings                                                           # no other type is touched
+        editor.edit_setting(first, "name", "mine")                                                                # a number that is free again comes first, not the one after the last
+        editor.remove_node(second)
+        menu.invoke(outlet)
+        menu.invoke(inlet)
+        menu.invoke(outlet)
+        assert [n.settings["name"] for n in graph.nodes()[-3:]] == ["default0", "default1", "default3"]          # (default2 is taken)
+        graph.validate()
+        editor.edit_setting(first, "name", "default4")                                                            # a name the user typed that looks like one is taken like any other
+        assert editor.add_node("boundary_inlet", 0, 0).settings["name"] == "default5"
+        graph.validate()
+        assert graph.add("boundary_inlet").settings["name"] == ""                                                 # the model adds nodes as it is told: a host picks its own names
 
 
 def test_py_the_message_line_shows_a_sentence_for_a_while_and_then_clears():
@@ -544,7 +592,7 @@ def test_py_the_real_window_check_script_runs_clean_off_screen_without_pauses():
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     result = subprocess.run([sys.executable, os.path.join(root, "dev", "editor_check.py"), "--offscreen", "--fast"], capture_output=True, text=True,
                             cwd=root, timeout=120)
-    assert result.returncode == 0 and "editor check passed (17 checks)" in result.stdout, (result.stdout[-600:], result.stderr[-600:])
+    assert result.returncode == 0 and "editor check passed (45 checks)" in result.stdout, (result.stdout[-600:], result.stderr[-600:])
 
 
 def test_py_destroying_the_editor_cancels_its_timers_so_nothing_runs_after_the_window_is_gone():
@@ -649,7 +697,7 @@ def test_py_ports_are_hit_at_other_zoom_levels_with_a_radius_of_screen_pixels():
         editor.view = geo.View(0.5, 30.0, 40.0)
         editor.redraw()
         start, end = port_at(editor, nodes["level"], "outlet", "out"), port_at(editor, nodes["safe"], "inlet", "b")
-        drag(editor, (start[0] + 12, start[1]), (end[0] - 12, end[1]))
+        drag(editor, (start[0] + 12, start[1]), (end[0] + 12, end[1]))                                              # (12 px into the node: left of an inlet is its knob)
         assert graph.connection_into(nodes["safe"].inlet("b")) is not None
         far_start = port_at(editor, nodes["file"], "outlet", "right")
         press(editor, far_start[0] + 20, far_start[1])                                                              # 20 px away: not on the port

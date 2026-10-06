@@ -1,6 +1,7 @@
 # CANOPY - build plan for version 1
 
-Created 2026-10-02. Status: **in progress** (steps 0 to 10 done, the author's try-out of the editor still open; the author's listening check of step 7 passed).
+Created 2026-10-02. Status: **in progress** (steps 0 to 12 done; build 17 made the changes the author asked for after trying step 12 with a real device; step 13 is next; he tried a bad file too (an error message under the node, nothing unusual); the author's
+try-out of the step 10 editor and his listening check of step 7 passed).
 The design is `docs/canopy_design.md` (read it before every step). This plan builds exactly that design and nothing else.
 The project folder is `C:\Users\Argh\Documents\ai\projects\canopysynth`; the design and this plan live in its `docs\` folder.
 
@@ -395,6 +396,167 @@ The look follows the author's mock-up of a future third-party node ("Multiply"),
    nothing flashes. A picture of the window cannot be taken off-screen (Windows does not paint it), so the look was checked by showing the window on
    the screen for a moment (`dev/editor_check.py --screenshot`).
 
+## Decisions recorded at step 11 (implementation choices the design leaves open, and what the author asked for: the author may veto any)
+
+The author tried the step 10 editor ("everything feels good") and asked for three changes, all made at step 11:
+(a) a way to delete a connection: right-click on the inlet, then "Disconnect"; (b) built-in nodes still have a title bar, only an uncoloured one, with a
+thin off-white line under the title that stops short of the node's edges; (c) the bar of a third-party node that is not realtime safe darker and closer to
+vermillion, but not fully saturated (#EDB48F became #D97A5E; a test states "darker, closer in hue to vermillion, more colour than the peach, less than
+vermillion").
+1. **The built-in title bar (b).** I read "uncoloured bar" as: the bar has the node's own grey, with the title in off-white bold text inside the node (as a
+   third-party node's bar is inside it), and the thin off-white line under it, inset 12 units from each side. So the title is no longer above the node on the
+   dark background (step 10), and built-in and third-party nodes now have the same height and the same port positions. If the author meant a bar in the
+   background's dark colour, it is one line in `canvas.py`.
+2. **Knobs** (design section 6). Each inlet has its knob in a pill (40 x 26) to the left of the node, 15 units off its edge and level with the inlet's
+   port: a round dial (radius 10) with a white tick that turns 135 degrees either way from straight up for -1 and +1. Drag a free knob up or down: 200
+   screen pixels cover the whole range, whatever the zoom, measured from where it was pressed (up = more). Double-click it to type a value in a box over
+   the pill (Enter accepts; a refusal says why in the message line). Hovering a knob (or dragging it) shows "label: value" to its left, the raw -1..1
+   value in at most three decimals, as design section 6 says for version 1. **An inlet that has a connection shows no knob** (build 14 grayed it out, as
+   the design then said; after the try-out the author asked for it to disappear and allowed the one sentence of design section 6 to be reworded, which it
+   was: "its knob is not shown (the knob keeps its position and comes back when the connection is removed)"; the layout simply has no knob for such an
+   inlet, so there is nothing to press, hover or draw there, and the node's box does not reach out for it). **Every knob turns translucent while a wire
+   is dragged**, as the mock-up said (the colours are blended with the background: a Tk canvas has no transparency).
+3. **Widgets** are drawn from the descriptor data in rows below the ports, inset 10 from the node's edges: a **button** (released over the button it
+   was pressed on, it tells `add_action_listener` functions `(node, action name)`; with none attached it says so), a **text** box (a click opens a box over
+   its value; Enter sets the setting, read as a whole number or a number if the setting is one; the model's refusals are shown), a **choice** (a click opens
+   a menu of the choices, the current one marked, under the value box), a **label**. A widget kind the editor does not know is left out (plan, "Reserved
+   for later versions"). A value too long for its box is cut with an ellipsis (a path at its start, so that the file name stays). A node is as wide as its
+   widest widget needs.
+4. **Menus.** Right-click: on the background, the node types to add and a **Loop protection** tick (turning it on is refused with the model's reason while the
+   graph has a loop); on a node (also on its widgets, knobs, free inlets and outlets), **Delete**, plus **Rename...** on a boundary node and **Internal
+   sampling rate...** on a node type that has one (design sections 7 and 13); on a connected inlet, **Disconnect**; on a wire (within 6 screen
+   pixels of it), **Delete connection**. Rename and the rate open a box over the node's title bar. Deleting needs no confirmation, as the design says nothing
+   of one, and there is no undo (none is in the design).
+5. **Typing boxes** are Tk entries placed over the picture. Enter accepts; Escape drops; a press elsewhere, a scroll, a pan or a right click accepts it; a
+   new graph drops it. There is no focus-out rule: focus moving away by itself (another application, the window manager) must not close a box being typed in.
+6. **Telling the host.** Kinds given to `add_listener` functions: "added", "connected", "disconnected", "removed", "setting", "loop_protection" (each also
+   generates `<<GraphChanged>>`), and "moved" and "knob" (no virtual event: nothing the compiled graph holds changed). "setting" is told only when the
+   value changed. Step 12 hangs `Engine.update()` on the first six, and sends a knob value to the engine live (see step 12).
+7. **Double clicks are found by the editor itself** (two presses at most 500 ms and 5 pixels apart, by the events' own times), not by Tk's `<Double-...>`
+   bindings: with those, a test that double-clicked failed about one run in eight, because Tk did not always match the second press (found by looping the
+   test; the cause was seen in a log of which handler ran).
+8. **Selecting several nodes (the author's request after the try-out).** Pressing the background and dragging draws a dashed light-blue rectangle, and
+   the nodes whose **bodies** it touches (not their ports or knobs) are selected live as it grows and shrinks, from any corner; a click on the background
+   clears the selection. Every selected node is outlined as selected. Pressing a node that is in the selection and dragging it moves the whole selection
+   by the same amount (a node's x and y are in world units, so by the same pixels at any zoom); pressing a node that is not in it selects it alone. A
+   click without a drag on a member of a group narrows the selection to that node (as in most editors); pressing a knob, a widget or an inlet, or
+   right-clicking a node, also selects just that node. Selecting is no edit: no listener is told, nothing is brought to the front (a single `select`
+   still brings its node to the front). `Editor.selection` is the frozenset of selected node IDs, `Editor.selected` the ID when exactly one is selected
+   (else None), `Editor.select_nodes(ids)` sets the selection. Choices of mine, vetoable: a node counts if its body only touches the rectangle (not only
+   if wholly inside); the rectangle does not scroll the picture at the window's edge; Delete in the node menu still deletes only the node
+   right-clicked.
+9. **What is not here**: Shift-click or Shift-drag to add to a selection, a Delete key, deleting or copying a whole selection, keyboard use of the
+   boxes beyond Enter and Escape, undo.
+
+## Decisions recorded at step 12 (implementation choices the design leaves open, and what the author asked for: the author may veto any)
+
+The author asked, with the go-ahead for step 12: **right-clicking with several nodes selected offers "Delete selected"**, which deletes every selected node.
+Done: right-clicking a node that is one of several selected keeps the selection, and its menu says "Delete selected" where it said "Delete" (its own other
+items, Rename... and Internal sampling rate..., stay, for the node right-clicked); the deletion is one edit (one "removed" event, so one recompile); a node
+outside the selection is still selected alone by a right click, with the plain "Delete".
+1. **How an editor finds its Engine.** Design section 15 shows `Engine(graph)` and `Editor(root, graph)` and says "editor edits trigger compile-and-swap", without
+   saying how the two meet. `Engine(graph)` now registers itself with the Graph (a weak set: `Graph.engines()` lists the open ones), and an Editor of that
+   graph finds them there, at its next tick or edit (so the order of making them does not matter), and makes one `EngineLink` (`canopysynth/editor/link.py`,
+   no drawing) for each. The first engine's node messages and playback times are the ones shown; every engine gets the recompiles, the knobs and the buttons.
+   A closed engine is let go of. An editor with no engine is the editor of step 11 (a button says that no engine is attached).
+2. **Compile and swap.** After a node is added or removed, a connection made or removed, or a setting changed, the link calls `Engine.update()`. A graph that
+   cannot be compiled (the usual case while editing: a boundary node without a name, or two with one name) leaves the engine running the previous graph, and
+   the message line says "not applied: the engine keeps running the previous graph (why)" and stays until a compile works (it clears only its own sentence).
+   Not recompiled: moving nodes, selecting, the loop-protection switch (the engine ignores loops), and knobs, which are written to the engine at once
+   (`Engine.set_knob`: an atomic store, no recompile; a knob of a node the installed graph lacks is ignored, since the compile error is already shown).
+   After a deletion the link calls `Engine.collect()` (the device of a deleted preview node is closed when the engine lets go of the last graph that has it).
+   `Editor.last_edit` (kind, node IDs, the key of the setting or inlet) is set before the listeners are called, so that a listener can tell which setting.
+3. **The preview node** (design section 9). Play, Pause and the device choice come from the descriptor; the engine does "play" and "pause" and, after the
+   Device setting changed (and the graph was recompiled), "device". **The time field** is a row the editor adds under the node's widgets (a table
+   `EXTRA_WIDGETS` in `geometry.py`: the playback position is no setting, so no descriptor widget can carry it): it shows hh:mm:ss.mmm (milliseconds cut, not
+   rounded, hours of two or more digits), follows the playback (the editor asks the first engine every 100 ms, and draws only when the text changed), and a
+   click opens a box in which hh:mm:ss.mmm, mm:ss.mmm, ss.mmm or ss is typed (a fraction of 1 to 9 digits, a minus sign, minutes and seconds below 60 when a
+   larger unit is given); Enter moves the playback there, also while it plays; anything else is refused with a sentence. (`timetext.py`.)
+4. **The device list** is asked of the engine when the choice is clicked (`Engine.audio_devices()`): "(system default)" first, then the machine's devices
+   (a device with that very name is not listed twice); a value saved earlier that this machine lacks still shows at the end of the list, marked, and choosing it
+   again is allowed; a missing device plays on the system default and the node says so under itself (the engine's message).
+5. **The file node** (design section 11). Open... asks for a file with the standard Windows dialog (`tkinter.filedialog`; `Editor.file_chooser`, a function,
+   replaces it for tests and hosts), stores the answer as an absolute path (`os.path.abspath`) in the node's `path` setting (which recompiles), and has the engine
+   load it ("open": the file is read then and not before); a file that cannot be used is said under the node in amber (the node's message: "file not found: ...",
+   "not a WAV file, or damaged: ...", the old file keeps playing). **My addition, vetoable: a read-only "File" row on the node showing the file's name** (not the
+   whole path; "(none)" for no file), because nothing else on the node says which file it holds.
+6. **Notes under nodes.** What an engine says about a node (the node message) and, for a preview node, the warning of design section 9 ("not realtime safe, so
+   the sound may break up: ..."), are drawn in amber under the node, wrapped to its width, refreshed after every compile and every button.
+7. **Trying it with ears.** `python dev/editor_try.py` opens the editor on two file nodes and a preview over the machine's real audio (`--audio null` for
+   none, `--wav FILE` to open a file at once); its docstring lists what to try. `python dev/editor_check.py --audio system` uses the real audio system for its
+   own (silent) graph. The tests always use miniaudio's null backend.
+8. **Not here / known**: the Play button does not show that the node is playing (the time field moving does); the editor polls the time of every preview node
+   of the first engine every 100 ms whether or not it is on the screen (cheap, and the text is drawn only when it changed); a closed engine's last notes stay on
+   the picture until the next change (see the progress log); no progress or busy indication while a large file loads (the engine's "open" runs on the UI thread,
+   as the design's buttons do).
+
+## Decisions recorded after the author's try-out of step 12 (build 17: what the author asked for, and implementation choices the design leaves open; the author may veto any)
+
+The author tried step 12 with a real device: playing, typed times, switching files and wires during playback and the device list worked, and later a bad file too (2026-10-06: an error message below the node and no unusual behaviour).
+He found two problems: (1) a boundary node was added with an empty name, which made the graph fail to compile; (2) while the graph could not compile, wires could still be
+connected and disconnected in the editor with no effect on the sound, until the fault was fixed, when all those edits took effect at once. For (2) I laid out four ways:
+A refuse an edit after which the graph cannot be compiled, and undo it; B accept it and make the gap visible; C prevent the invalid states; D compile around the fault
+(against the design, which has the engine refuse such a graph: ruled out). **The author chose C**, and for (1) asked for the names default0, default1, ...
+1. **A new boundary node is named** `default0`, `default1`, ...: the first name that no boundary node (of either kind) has (`Editor.add_node`). The model is
+   unchanged: `Graph.add("boundary_inlet")` still gives an empty name (design section 14 lets the model hold one while editing, and a host picks its own names).
+2. **The editor refuses an empty name and a name another boundary node has** (of either kind), in the Name box and in Rename...: `Editor.edit_setting` leaves the
+   name as it was, returns False and says why in the message line. The sentence gives the name and the kind of the other node ("a boundary inlet"), not a node ID, because
+   the editor shows none. Exactly the engine's rule is applied and nothing stricter: names are compared byte for byte, so "Out", "out " and " " are names, and a node's
+   own name typed again is no change.
+3. **Not done, because the author chose C only: A as a safety net.** A graph that cannot be compiled can still come from outside the editor: a host that put a boundary
+   node without a name into the Graph, or a file loaded with one (`Graph.from_dict` does not check boundary names, design section 14). Then, as at step 12, the engine keeps
+   running the previous graph, the message line says so until the next compile works, and the editor's graph and the installed one differ until then. I found no other
+   compile failure the editor can cause (read in `canopy_engine.c`: an unknown type, a repeated node ID, setting and knob values, connections, the scratch-buffer total; the
+   model already refuses the first four kinds before the engine sees them, and the last needs more buffers than any real graph).
+4. **Tests**, written before the fix and seen to fail for the right reason (seven failed, among them the new random run with an Engine, which showed the author's problem at its
+   third edit: "not applied: ... needs a name"): `test_editor.py` (the names default0... from the add menu), `test_editor_controls.py` (the refusals from the box and from Rename...,
+   and a 500-step random run of adding, renaming and deleting that checks after every step that the graph can be compiled), `test_editor_link.py` (a 400-step random run with an Engine over
+   the graph: after every edit the engine has exactly the editor's boundary nodes and gives what the picture shows, each edit that changes the graph compiled it once and the others not at all, and no
+   compile failed). The step 12 tests that used an unnamed boundary node to make a graph that cannot be compiled now put one into the model the way a host can (`add_unnamed`).
+5. **Mutation check.** `dev/mutation/step12b.py` (26 faults): the first run caught 24 and left 2 alive (a name that differs from another node's only by a space or by case was never tried;
+   the sentence for a taken name was not checked for the name): gaps in my tests, closed, then 26 of 26. The older Python specs were run again after the editor change: `step10.py` 113,
+   `step11.py` 178, `step11b.py` 39 caught; `step12.py` left two alive (L21: a time the engine refuses is not said; V234: the time field starts empty) that the campaign before this change
+   had caught, because two of the step 12 tests I reworked had lost the scenario (a time typed into a preview node the engine lacks; the time field's text before an engine reports).
+   I could not tell which test had caught them (the old logs were not kept); the thorough run on the same code agreed with the fast one, so it was the tests. Two assertions added; both caught
+   now. `step8.py` G10 and V11 and the whole of `step9.py` (76) were also run: all caught.
+6. **Verified** (ran it): `python run_tests.py`: 475 passed, 0 failed (223 C tests, each also under the debug heap and AddressSanitizer, and 252 Python); the changed editor and runner tests
+   six times in a row, no failure. **Not tried by a person yet:** adding boundary nodes and renaming them in a real window over the real device (the tests drive real Tk windows, with miniaudio's null backend).
+
+## The mutation runner made faster (build 17; the author asked for the first three of the four options I had listed after step 12)
+
+The author's complaint: campaigns took hours and opened short-lived windows on the taskbar thousands of times. Measured before, on this machine, one run alone: the build 17 s,
+the C test programs 7 s, 13 s (debug heap) and 13 s (AddressSanitizer), the Python tests 27 s (one stress test of them 9.5 s). So a mutation of a C file cost about 76 s and one of a
+Python file, in the editor specs, about 23 s.
+1. **Stop at the first failing test** (`run_tests.py --fail-fast`): a fault counts as caught as soon as one test fails; the C programs after a failing one, and the Python tests after
+   one that fails, are not run. A run that finds nothing wrong still runs everything.
+2. **No C tests after a change to a Python file** (`--no-c`): they cannot change.
+3. **Cheapest tests first** (`--record-times FILE` in the first, whole run of a campaign, `--order-by-times FILE` in the others): per test, by the times that campaign's own first run
+   measured (kept in a private temporary file, so campaigns side by side do not disturb each other); a test with no recorded time, a new one, runs first. My choice, vetoable: the order is
+   by measured time per test, not the fixed order by test files I had described (geometry, time text and selection first; link and engine last), because it needs no list to keep up to date.
+
+`mutate.py` uses all three unless it is given `--thorough` (the old way, kept for checking). **Not applied:** the fourth option (fewer taskbar flashes: child processes with no console
+window, test windows as tool windows): the author asked for the first three.
+**Why the verdicts stay the same** (reasoned, then measured): a fast run stops only after a failure, so a fault no test notices still runs every test; `--no-c` is used only where the C
+code is unchanged; the order only permutes independent tests, and a campaign runs the fast order once before mutating and requires it to be green (a test that depended on the order would
+show there); a times file that cannot be read ends the run with a sentence and no total before any test runs, which that check in front of the campaign turns into a stop, not into detections.
+**Found and fixed on the way (mine, in the old runner):**
+(a) after a mutation of a C file the next Python-file mutation ran against the DLL as it was built from the mutated C code (the sources were put back, the DLL was not built again): the runner now
+builds again first (only `step9.py` has a Python mutation right after a C one: D01, run again and caught by a test against the clean DLL);
+(b) a mutation whose `old` text is no longer in the file was SKIPPED with a line in the log and the exit code ignored it, a survivor and a build failure alike: `step8.py` G10 had been skipped
+since step 12 (I added a line to `Graph.__init__`), and `step10.py` V11 stopped matching when I changed `add_node` at this step; both re-pointed and caught; the exit code is now 0 only if every
+mutation was caught and the restored suite is green;
+(c) a mutation of `run_tests.py` itself is always run the thorough way, because the fast run that judges it uses the code it has just broken (R07, "the run stops after any test", looked like a
+survivor: the run that judged it stopped after one passing test).
+**Checked** (the runners have tests and faults of their own): `tests/python/test_runner.py` (18 tests: a copy of `run_tests.py` in a throwaway project with six tiny tests, stubs for the C programs
+and for `subprocess.run`, and the mutation runner's whole campaign on a fake folder); `dev/mutation/runner.py` (75 faults of the two runners: the first run caught 69 and left 3 alive, R07 for the
+reason in (c) and M18 and M26b gaps in my tests; after the fixes 75 of 75); `dev/mutation/known.py` (two faults no test can notice and two that are caught, one of them only by the slow link
+tests): both modes give the same four verdicts, the survivors included. Compared on the same faults, in both modes, run side by side (so absolute times are inflated, the ratios are not):
+`step11b.py`, 39 faults, all caught in both: 996 s of mutation runs thorough against 113 s fast (25.5 s against 2.9 s per fault: 8.8 times faster); eight faults of `step3.py` (C code), all
+caught in both: 532 s against 245 s (66 s against 31 s per fault: 2.2 times faster, the 17 s build being most of what is left); the whole of `step9.py` (76, with the rebuild after its C block)
+in fast mode: 76 caught, 956 s. A campaign still pays two whole-suite runs (about 80 s each) and one run of the fast order.
+**Believed, not verified:** that the saving for the other C specs is about that of the sample (only eight faults of `step3.py` were run both ways); the fast run names only the first failing
+test (`--thorough` shows every one that fails).
+
 ## Questions still to ask, and where
 
 (Answered at step 2: atomics = C11 stdatomic; no Python tier in version 1. Answered at step 4: how an instance adopts a new graph. Answered at step 7:
@@ -758,7 +920,7 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
   not in the bridge yet (decision 7).
 - Done: the section 15 snippet works end to end without the editor.
 
-### Step 10 - editor: canvas, nodes, connections. Recommended effort: HIGH - DONE (build 13), except that the author has not yet tried it
+### Step 10 - editor: canvas, nodes, connections. Recommended effort: HIGH - DONE (build 13); the author tried it and approved it, asking for three look changes (made at step 11)
 - [x] tkinter canvas widget: node drawing, ports, connections, dragging nodes, drawing connections from outlet to inlet (fan-in impossible, loops
       refused by default), scroll-wheel zoom, Shift/Alt scroll, middle-drag pan, the right-click add-node list: `canopysynth/editor/`, see "Decisions
       recorded at step 10".
@@ -767,8 +929,8 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
       while a wire is dragged, every kind of refusal with its sentence, Escape, tooltips, the add menu and what choosing an entry does, messages, the lazy
       import, the timers cancelled on destroy, the check script itself), a test of `Graph.can_connect` in `test_graph.py`, `dev/mutation/step10.py`.
 - [x] `dev/editor_check.py`: the real-window check (below).
-- [ ] **The author has tried it**: `python dev/editor_check.py` (a visible window driven by synthetic events, 17 checks), then `python dev/editor_check.py
-      --try` to use it by hand.
+- [x] **The author has tried it** (before step 11): "everything feels good"; he asked for a way to delete a connection (right-click on the inlet), an
+      uncoloured title bar with a thin line for built-in nodes, and a darker vermillion for the not-realtime-safe bar: all made at step 11.
 - Verified (ran it): `python run_tests.py`: 377 passed, 0 failed (223 C tests, each run three times, plus 154 Python tests, 42 new). The check script ran
   clean on the screen and off it. The mutation check, `dev/mutation/step10.py`: 121 deliberate faults (the geometry, the widget, `can_connect`), each followed
   by the suite: all caught. The first run left 6 alive, all gaps in my tests, closed: a fit limited by the height (not the width), a replaced graph whose
@@ -790,19 +952,75 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
   the mock-up; whether the wheel behaves on a laptop touchpad, where Windows sends small deltas: the code scales by `delta / 120` so it should be smooth);
   that Alt+wheel is not caught by Windows (an Alt press alone can activate a menu bar, and there is none); the right-click menu itself (tests invoke its
   entries; a real pop-up waits for a click, so the author has to look at it).
-- Done: the check script passes; the author has still to try it.
+- Done: the check script passes; the author tried it.
 
 
-### Step 11 - editor: knobs, widgets from data, node menus. Recommended effort: MEDIUM-HIGH
-- [ ] Knobs on inlets (gray when connected, double-click to type a value, raw -1..1 display); widgets drawn from the descriptors' data (button,
-      text, choice, label); right-click node menu (delete, rename for boundary nodes, "internal sampling rate..." for nodes that have one);
-      connection menu (delete); the loop-protection toggle.
-- From the author's mock-up (shown at step 10): each inlet has its knob in a pill-shaped holder to the left of the node, a round dial with a white tick;
-      the knobs of every inlet turn translucent while a wire is dragged (the mock-up shows one translucent, one opaque, to illustrate); a connected inlet
-      shows no knob in the mock-up (the design says grayed out: ask which). Third-party nodes show a title bar coloured by realtime safety (done at step 10).
-- Done when: every widget kind renders from data, and the menus do exactly what design section 13 lists.
+### Step 11 - editor: knobs, widgets from data, node menus. Recommended effort: MEDIUM-HIGH - DONE (build 14; amended at build 15 after the author's try-out: hidden knobs on connected inlets, rectangle selection), except that the author has not yet tried the result
+- [x] Knobs on inlets (hidden when the inlet is connected, translucent while a wire is dragged, drag to turn, double-click to type a value, raw -1..1 value shown on
+      hover); widgets drawn from the descriptors' data (button, text, choice, label; an unknown kind is left out); right-click menus: node (Delete, Rename...
+      on boundary nodes, Internal sampling rate... on nodes that have one), connected inlet (Disconnect), wire (Delete connection), background (add node,
+      Loop protection); the author's three look changes of the step 10 try-out (see "Decisions recorded at step 11").
+- [x] **Build 15, after the author's try-out of build 14** (the author asked, with permission to reword that one sentence of design section 6): an inlet that
+      has a connection shows no knob (design section 6 reworded); **rectangular selection** (drag on the background; the nodes whose bodies the
+      rectangle touches are selected live) and **moving the selection together** (drag any selected node); `Editor.selection`, `.selected`, `.select_nodes`.
+- [x] Tests: `tests/python/test_editor_controls.py` (new: knobs, widgets, boxes, menus, double clicks, in a real off-screen window, node types written as
+      descriptor dicts), more in `test_editor_geometry.py` (knob and widget layout, hit order, dial and drag maths, shortening, distance to a wire, blending,
+      the vermillion colour) and `test_editor.py` (the uncoloured bar, the title position, the new menus); `dev/editor_check.py` now has 29 checks (knob drag
+      and typed value, a text box, a button, the Delete and Disconnect menus; 32 at build 15, with the selection); `dev/mutation/step11.py` (178 faults now).
+      Build 15 added `tests/python/test_editor_selection.py` (9 window tests: the rectangle growing and shrinking, any corner, bodies only, a click clearing,
+      group dragging at two zooms, an outside node dragged alone, a click on a group member narrowing it, knobs and widgets selecting one node, the selection
+      API, a new wire hiding a knob), 2 geometry tests (hidden knobs in the layout, the touch rule of the rectangle) and `dev/mutation/step11b.py` (39 faults).
+- Verified at build 14 (ran it): `python run_tests.py`: 410 passed, 0 failed (223 C tests, each also run against the debug heap and under AddressSanitizer, plus 187
+  Python tests). The check script ran clean off the screen and on it (29 checks), and I looked at a screenshot of the editor. Mutation check:
+  `dev/mutation/step11.py` 185 of 185 caught, and `step10.py` (113 now: 7 entries for the removed title strip went, 14 were re-pointed) 113 of 113
+  caught, after the last change of the code. The first round of step 11 left 2 alive, both gaps in my tests (a button wider than the node's minimum;
+  a double click that was not on a free knob did nothing different from a single press): closed. The step 10 round after the last code change left 1
+  alive, a method the removed title strip had left unused: deleted. Measured (throwaway script, quiet machine): a redraw with knobs and widgets costs
+  about 0.45 to 0.55 ms per drawn node (10 nodes 5.7 ms, 50 nodes 21 ms, 200 nodes 81 ms; at the zoom that fits 200 nodes the text is below the size
+  that is drawn, so the cost with text on every node is somewhat higher), the same as before.
+  Found on the way: **a flaky test**. The test of typing a knob value failed about one run in eight, on code I had not changed. Looping it, and logging which
+  handler ran for each press, showed that Tk did not always match the second press of a double click to its `<Double-ButtonPress-1>` binding (other events
+  arriving between the two presses; Tk's matching is not reliable then), so the press was handled as a single one. The editor now finds double clicks
+  itself from the events' times and places, and the test, which loops clean (0 failures in 40 runs, after 7 in 60), checks the exact edges (500 ms, 5 pixels).
+  I had first guessed that the box's focus-out rule closed it, removed that rule (it was untested, and is better absent) and re-ran: still failing, so the
+  guess was wrong, and the real cause was only found by logging. Also fixed on the way: a choice menu's variable was unset by Python's garbage collector
+  unless the menu kept it (found by reading my own test before running it).
+- Verified at build 15 (ran it): `python run_tests.py`: 421 passed, 0 failed (223 C tests, each also run against the debug heap and under AddressSanitizer, plus 198
+  Python tests); the check script (32 checks) off the screen; a screenshot of a rectangle being dragged. Mutation check after the last code change:
+  `step11b.py` 39 of 39, `step11.py` (178: 2 re-pointed, 7 about the grayed knob dropped) 178 of 178, `step10.py` (113: 4 re-pointed) 113 of 113, all caught.
+  Two things went wrong with the run, not the code: the first set of eight campaigns died with no output (the machine had gone to sleep while I waited
+  between turns: now held awake with `request_keep_awake` `session_idle`), and the second set crashed at its start because eight copies built and ran
+  the C tests at once against a 60 s limit (now started a minute apart, limit 150 s).
+- Believed, not verified: how it feels (knob drag speed, 200 pixels for the range; the size of the pill and dial against the mock-up, which I cannot
+  see now: the notes of step 10 are what I went by); the real pop-up of the new menus (tests invoke their entries; a real pop-up waits for a click); a
+  double click at the speed of a real hand on a real mouse (the rule is the usual 500 ms and 5 pixels); the feel of the selection rectangle (it does not
+  scroll the picture at the window's edge, and touching a node's edge by a hair selects it).
+- Open: the author tries the new editor, `python dev/editor_check.py --try` (the top of that file lists what to try).
+- Note: a `--try` window left open keeps `canopysynth/canopysynth.dll` loaded and the linker cannot overwrite it. At this step the loaded DLL was renamed to
+  `canopysynth/canopysynth.dll.build13-in-use` (Windows allows that) and a new one built: **delete that file once the window is closed**.
 
-### Step 12 - editor integration and live editing. Recommended effort: HIGH
+
+### Step 12 - editor integration and live editing. Recommended effort: HIGH - DONE (build 16; two changes after the author's try-out at build 17: see "Decisions recorded after the author's try-out of step 12")
+- [x] Built, see "Decisions recorded at step 12". `Engine` gained `set_knob`, `action`, `node_message`, `collect`, `set_audio_backend`, `audio_devices`,
+      `preview_state`, `preview_set_time`, `preview_warning`, `closed`; `Graph.engines()`; `canopysynth/editor/link.py` (`EngineLink`), `timetext.py`; the editor
+      got notes under nodes, the preview's time field and the file node's File row, the device list from the engine, the file dialog, "Delete selected",
+      `last_edit`; `dev/editor_try.py`; `dev/editor_check.py` has 45 checks and an `--audio` option.
+- [x] Tests: `test_engine_controls.py` (13), `test_editor_link.py` (15, real windows, null audio, including editing during playback), `test_editor_time.py` (4),
+      more in `test_editor_selection.py` and the older files; `dev/mutation/step12.py` (112 faults).
+- Verified (ran it): `python run_tests.py`: 450 passed, 0 failed before the last five tests were added (223 C tests, each also run against the debug heap and
+  under AddressSanitizer; 227 Python), 453 in the mutation runs and 249 in the editor files' last run. The timing-dependent tests were looped: 14 runs, 0 failures.
+  The check script passes its 45 checks off screen. Mutation check, after the last code change: `step12.py` 112 of 112 caught (113 written: L31 is
+  equivalent and was removed; the first round left 6 alive: 5 were gaps in my tests, closed and re-run: a knob on a later inlet, an action error on a node
+  the engine lacks, stored empty notes, an engine shown at once, a menu built for a node outside a group), `step10.py` 113, `step11.py` 178, `step11b.py` 39, all
+  caught again. A real audio device was NOT used by any test or check.
+- Believed, not verified: that it sounds right with a real device (the tests use the null device; the C code and its tests are unchanged since step 7), how a
+  real Windows file dialog behaves (the tests replace it), the feel of editing while playing.
+- The author tried it with a real device (build 16): playing, typed times, switching files and wires during playback and the device list work. He also tried a bad file (2026-10-06): an error message below the node and no unusual behaviour. Nothing is open from his try-out.
+  He found two problems (a new boundary node had no name, which stopped the graph compiling; edits piled up unseen while it could not compile): fixed at build 17, option C.
+- Note: the author's `editor_try.py` window held `canopysynth/canopysynth.dll` open, so at build 17 the loaded DLL was renamed `canopysynth/canopysynth.dll.build16-in-use` (Windows allows
+  that) and a new one built: **delete that file once the window is closed** (that window still runs the build 16 code).
+- Known gap: when an engine is closed, the last notes and times stay on the picture until the next change (fix: clear them when the editor has no engine).
+- (The plan text of the step, as written before it was built:)
 - [ ] Editor edits trigger compile-and-swap on the Engine; the FileReadNode "open" button and error text; the preview node's play, pause, time field
       (hh:mm:ss.mmm), device list and warning display; compile errors shown while the previous graph keeps running.
       The calls step 7 built for this: Play and Pause are `canopy_engine_action(node, "play" / "pause")`; the time field polls `canopy_preview_state`
@@ -812,6 +1030,12 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
       the node's note is `canopy_engine_node_message`, refreshed after every action and install; the warning is `canopy_preview_warning`, asked
       after every install; after an edit that deletes a preview node the editor calls `canopy_engine_collect` (the device of a deleted preview is
       closed when the engine lets go of the last graph that has the node).
+- What step 11 gives step 12 to hang on: `Editor.add_listener(f)` (kinds "added", "connected", "disconnected", "removed", "setting", "loop_protection"
+      mean recompile and swap with `Engine.update()`; "knob" and "moved" do not), `Editor.add_action_listener(f)` (`f(node, action)` for the buttons: Play and
+      Pause are the actions "play" and "pause", the file node's button is "open"), and `Editor.say(text)` for messages. A knob move must reach the engine live:
+      the Python `Engine` has no call for it yet (add one over `canopy_engine_set_knob(engine, node_id, inlet index, value)`; the "knob" event gives no
+      value, read it from `node.knobs`). The choice widget of the preview node lists only "(system default)": step 12 must supply the devices
+      (`Editor._choice_menu` builds the menu from `WidgetBox.choices`).
 - Done when: editing during playback works with the null backend in a throwaway script, and the author confirms it with a real device.
 
 ### Step 13 - whole-system verification. Recommended effort: MAX
@@ -892,9 +1116,10 @@ the result) run under the lock; `canopy_audio_open` and `canopy_audio_close` run
 | 7 | done (build 8), listening check passed | miniaudio vendored (WASAPI + null backend); the audio device layer; the engine's own (service) instances and exclusive buttons; the `realtime_preview` node with exported calls for the editor; a throwaway-measured callback of 1 to 10 us; mutation-checked (142 faults); `dev/listen_check.py` for the author |
 | 8 | done (build 9) | the Python graph model (`Graph`, `Node`, `Port`), the node-type catalog with migrations by type version, the value checks, `to_dict` / `from_dict` of format `canopysynth-graph` version 1 pinned by a hand-written fixture; compiled-by-the-engine cross-checks; the C file node's absolute-path rule made exact; mutation-checked (139 faults, all caught; the 41 older file-node mutations re-run) |
 | 9 | done (build 10) | `Engine` and `Instance` (compile, update, boundary list and writes, point and span queries as a memoryview, errors per design section 16, lifetimes); one new C call (`canopy_instance_read_at_status`); mutation-checked (62 faults); GIL-free queries measured to run in parallel |
-| 10 | done (build 13), the author's try-out open | `canopysynth/editor/` (geometry with no Tk, theme, the `Editor` Frame): nodes, ports, wires in the style of the author's mock-up, moving nodes, connecting from either end with allowed ports marked and refusals explained, zoom and the three kinds of panning, the add-node menu; `Graph.can_connect`; `dev/editor_check.py`; mutation-checked (121 faults); redraw cost measured |
-| 11 | not started | |
-| 12 | not started | |
+| 10 | done (build 13); the author tried it and approved it (three look changes, made at step 11) | `canopysynth/editor/` (geometry with no Tk, theme, the `Editor` Frame): nodes, ports, wires in the style of the author's mock-up, moving nodes, connecting from either end with allowed ports marked and refusals explained, zoom and the three kinds of panning, the add-node menu; `Graph.can_connect`; `dev/editor_check.py`; mutation-checked (121 faults); redraw cost measured |
+| 11 | done (build 14; amended at build 15), the author's try-out open | Build 15: no knob on a connected inlet (design section 6 reworded with the author's permission), rectangle selection and moving the selection together, `test_editor_selection.py`, `step11b.py` (39 faults), 421 tests green. Build 14: Knobs (pill, dial, drag, typed value, translucent while a wire is dragged), widgets drawn from data, node / inlet / wire / background menus, loop-protection switch, the author's three look changes; double clicks found by the editor itself after a flaky test; `test_editor_controls.py`; `dev/mutation/step11.py` (185 faults) and `step10.py` (113) all caught; 410 tests green |
+| 12 | done (build 16); the author's real-device try-out found two problems, fixed at build 17 (next row) | Compile and swap on every edit, live knobs, Play / Pause / device list / time field of the preview node, Open... of the file node with its name row, notes under nodes, Delete selected, `Graph.engines()`, `dev/editor_try.py`; 112 faults of `step12.py` and the older specs all caught; 450+ tests green |
+| 12b | done (build 17) | After the author's try-out of step 12: a new boundary node is named default0, default1, ... and the editor refuses an empty name or one another boundary node has (option C); the mutation runner made faster (stop at the first failure, no C tests after a change to a Python file, cheapest tests first: 8.8 times faster per fault on the editor specs, 2.2 times on C code) and corrected (a stale DLL after a C mutation, skipped mutations, the exit code, mutations of run_tests.py itself); `test_runner.py` (18), `step12b.py` (26), `runner.py` (75), `known.py` (4); 475 tests green; the older Python specs and `step9.py` run again, all caught after two test gaps were closed |
 | 13 | not started | |
 | 14 | not started | |
 | 15 | not started | |
