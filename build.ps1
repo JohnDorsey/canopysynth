@@ -1,4 +1,5 @@
 # Builds canopysynth\canopysynth.dll (64-bit) and up to three test programs with MSVC (cl), found through vswhere:
+#   build\examples\example_node.dll  the node type of examples\example_node.c (docs\node_author_guide.md), built against build\canopysynth.lib: it proves the example compiles
 #   build\run_c_tests.exe        the C tests against the optimised library code
 #   build\run_c_tests_debug.exe  the same tests against the MSVC debug runtime: /Od, /RTC1 (stack and uninitialised-variable checks),
 #                                every heap operation validates the whole heap, leaked blocks are reported at the end
@@ -29,10 +30,15 @@ $flags = "$common /O2"
 $debugFlags = "$common /Od /MDd /RTC1 /DCANOPY_DEBUG_HEAP"
 $dll = Join-Path $root "canopysynth\canopysynth.dll"
 $exe = Join-Path $build "run_c_tests.exe"
+$exampleBuild = Join-Path $build "examples"
+New-Item -ItemType Directory -Force -Path $exampleBuild | Out-Null
+$exampleSource = Join-Path $root "examples\example_node.c"
+$exampleDll = Join-Path $exampleBuild "example_node.dll"
 $debugExe = Join-Path $build "run_c_tests_debug.exe"
 
 $commands = @(
     "cl $flags /LD $sources /Fo`"$build\\`" /Fe`"$dll`" /link /IMPLIB:`"$build\canopysynth.lib`"",
+    "cl $common /LD `"$exampleSource`" /I `"$root\src`" /Fo`"$exampleBuild\\`" /Fe`"$exampleDll`" `"$build\canopysynth.lib`"",
     "cl $flags $sources $testSources /Fo`"$build\\`" /Fe`"$exe`"",
     "cl $debugFlags $sources $testSources /Fo`"$debugBuild\\`" /Fe`"$debugExe`""
 )

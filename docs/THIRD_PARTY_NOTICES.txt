@@ -1,0 +1,8 @@
+CANOPY contains two third-party libraries, compiled into canopysynth.dll. Both are by David Reid (mackron) and both are offered, at the user's
+choice, as public domain (the Unlicense) or under MIT No Attribution (MIT-0): neither asks for a notice to be kept. They are named here anyway.
+
+  dr_wav 0.14.6     reads WAV files             https://github.com/mackron/dr_libs
+  miniaudio 0.11.25 plays sound (WASAPI on Windows)   https://github.com/mackron/miniaudio
+
+The text of the licence of each is at the end of its header file in the source repository (third_party/dr_wav.h, third_party/miniaudio.h).
+The Python package uses only Python's standard library, including tkinter.

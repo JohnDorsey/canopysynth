@@ -24,6 +24,9 @@ powershell -ExecutionPolicy Bypass -File build.ps1    # only the build (-Stress 
                                                       # that nothing moved for 20 s; -Bench also builds build\bench.exe, the timing measurements: `python dev/measure.py [bridge|editor|c|device]`)
 python dev/stress.py [seconds] [--seed N]             # the Python-level stress (plan step 13): the real editor, off-screen, makes random edits through the public API while
                                                       # threads write a boundary inlet, read what it feeds, replace the file node's file and ask the engine what it holds
+python dev/package.py [--no-build] [--out DIR]       # plan step 14: builds, then writes dist/canopysynth-1.0.0-py3-none-win_amd64.whl (a wheel written by hand: pip installs it) and
+                                                      # dist/canopysynth-1.0.0-windows-x64.zip (the unzip-and-run folder: run_editor.bat, the package, docs, examples); checks the DLL's build number first
+python -m canopysynth [graph.json] [--audio null]     # the stand-alone editor (canopysynth/app.py: a File menu round the Editor and a real Engine); run_editor.bat starts it from an unzipped folder
 powershell -ExecutionPolicy Bypass -File dev/analyze.ps1   # static analysis of src/ (cl /analyze, the output filtered); a clean run prints no warning of ours
 python dev/mutation/mutate.py dev/mutation/step3.py   # mutation check: breaks the C code in 83 specific ways, one at a time, and requires the
                                                       # suite to notice each (add a spec file per step; step4.py has 134, step5.py 53, step6.py 64,
@@ -31,7 +34,7 @@ python dev/mutation/mutate.py dev/mutation/step3.py   # mutation check: breaks t
                                                       # step12b.py 26, runner.py 75 (the two runners themselves), known.py 4 (two survivors and two
                                                       # detections, to check the runner); the step 13 specs are FOCUSED campaigns, judged by the new tests alone: step13.py 20 (the overrun
                                                       # sweep), step13b.py 10 (the WAV loader), step13c.py 6 and step13c2.py 1 (the stress), step13d.py 7 (determinism), step13e.py 7 (the argument
-                                                      # checks of Engine) and step13f.py 11 (the sweep of the C API): a spec's `ENV` (for example CANOPY_C_TESTS) and `ARGS` (for example -k text) say which tests judge;
+                                                      # checks of Engine) and step13f.py 11 (the sweep of the C API); the step 14 specs: step14.py 26 (dev/package.py and canopysynth/app.py, Python files) and step14b.py 12 (run_editor.bat, the example node, the documents: FOCUSED, ARGS package docs): a spec's `ENV` (for example CANOPY_C_TESTS) and `ARGS` (for example -k text) say which tests judge;
                                                       # step8.py (but for 9 of its faults), most of step9.py and every spec from step10.py on break Python files,
                                                       # for which the runner skips the build and the C tests, and a spec with AREAS = [...] (step11.py) runs only those
                                                       # Python test files; a run that crashes without a total is "caught"; the exit code is 0 only if every mutation was caught)
@@ -51,7 +54,13 @@ python dev/editor_check.py                            # the real-window check of
                                                       # (--try leaves it open to use by hand; --offscreen --fast is what the tests run; --screenshot F.png)
 ```
 
+- Other compilers (plan step 14b, an experiment): clang 19 (clang-cl, and the GNU driver with `-ffp-contract=off`) builds all 238 C tests and gives the same bits as MSVC for the twelve recorded graphs; letting the compiler fuse multiply-add (`-march=native` with clang's default) or using fast-math changes them, and the determinism test fails loudly. gcc and Linux were not tried (not installed here). The project's one supported compiler is MSVC.
 - Platform: Windows 64-bit, Python 3.9 or newer (tested on the installed 3.11), MSVC 2022 found through vswhere. Other operating systems are later.
+- Distribution (step 14): `README.md`, `run_editor.bat`, `docs/user_guide.md`, `docs/node_author_guide.md`, `docs/THIRD_PARTY_NOTICES.txt`, `examples/` (`section15.py`: the design's section 15 snippet that runs; `example_node.c`: a node type written
+  in C and `use_example_node.py`, which registers it and queries it; build.ps1 builds `build\examples\example_node.dll` every time, so the example always compiles), `dev/package.py` (the wheel and the folder: the headers and the import library go into the package
+  under `include/` and `lib/`), `canopysynth/app.py` and `__main__.py` (the stand-alone editor). `dist/` is generated (not in git). Every ```python block of README.md and docs/user_guide.md is run by `tests/python/test_docs.py`
+  (write `# not run` on the first line of one that opens a window), and `tests/python/test_package.py` installs the wheel into a fresh virtual environment with pip, unzips the folder and runs `run_editor.bat` and the example.
+  When a document says what a call prints, `test_docs.py` has the piece it must print (`EXPECTED`). The DLL imports only KERNEL32.dll (`/LD` links the C runtime statically): a test fails if that changes, because the packages promise no redistributable.
 - Layout:
   - `src/` the C library. Headers: `canopy.h` (status codes, time helpers), `canopy_node.h` (node-type descriptor, registry, and the context calls a
     node handler makes), `canopy_engine.h` (graph description, engine, instances: what a host calls), `canopy_internal.h` (allocation wrappers, pool,
@@ -105,10 +114,12 @@ python dev/editor_check.py                            # the real-window check of
     PowerShell's `*>` is UTF-16 here: read it with `Get-Content` (or decode it as `utf-16`); `grep` and `tail | grep` find nothing in it.
   - A running `python dev/editor_check.py --try` window keeps `canopysynth/canopysynth.dll` open, and the linker then cannot overwrite it: a loaded DLL
     can be renamed (`canopysynth.dll.build13-in-use` was, at step 11, and `build16-in-use` at build 17), after which the build writes a fresh one. Close the window and delete the old file.
-  - `dev/mutation/` the mutation check; `dev/` also has `analyze.ps1`, `stress.py`, `measure.py`; `docs/` (`step13_measurements.txt` is the raw output of the measurements); `build/` (generated).
+  - `dev/mutation/` the mutation check; `dev/` also has `analyze.ps1`, `stress.py`, `measure.py`, `package.py`; `docs/` (`step13_measurements.txt` is the raw output of the measurements); `build/` (generated).
 - Test names are unique: C tests start with `test_c_`, Python tests with `test_py_`.
 - The Python bridge checks the arguments of `Engine.action`, `node_message` and the `preview_*` calls like those of `set_knob` (a node ID is a whole number in 64 bits, an action is
   text: `GraphError` otherwise; a closed engine is `RuntimeError` first): ctypes cuts an int to 64 bits without a word, so an unchecked ID presses another node's button.
+- Version numbers: five independent ones (release `1.0.0` in MAJOR.MINOR.PATCH form, saved-graph format, descriptor layout, node type version, delivery counter); what raises each is in
+  `docs/canopy_plan.md`, "Versioning rules". A change raises the number of the contract it breaks and no other; a new file format version must keep reading the old ones, with a fixture.
 - Delivery counter: `CANOPYSYNTH_BUILD`, bumped by exactly 1 once per finished prompt that changed code. It lives in `src/canopy.h` and
   `canopysynth/version.py` (a test checks they agree); the DLL exports it.
 - Compiler flags: C11 with `/experimental:c11atomics`, /O2 /W4 /WX, `/fp:precise` (no fast-math: the determinism rule), `_CRT_SECURE_NO_WARNINGS`. No
@@ -140,4 +151,5 @@ python dev/editor_check.py                            # the real-window check of
   through and then 100 ms for the ones that must not).
 - The shell tool mangles backslashes in heredocs: edit files with the Edit/Write tools or run a script file, not an inline `python - <<EOF`.
 - Line endings: CRLF for all source and text files (Windows); the Write tool makes LF files, so convert new ones (a script that rewrites `\r\n`).
+- Batch files: CRLF (labels and `goto` fail with LF), and `%errorlevel%` inside a parenthesised block is the value from before the block (found at step 14: use a label and `goto` instead).
 - No git for now.

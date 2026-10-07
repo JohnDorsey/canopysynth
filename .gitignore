@@ -2,3 +2,12 @@
 __pycache__/
 *.py[codz]
 *$py.class
+
+build/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+canopysynth/canopysynth.dll
+canopysynth/*.build*-in-use

@@ -295,7 +295,7 @@ class Graph:
 
     def can_connect(self, outlet, inlet):
         """None if `connect(outlet, inlet)` would succeed, else the reason it would refuse, as a sentence (never raises: ports that are not an outlet
-        and an inlet of this graph are refused with the sentence `connect` would raise). An editor uses it to show which inlets a wire may go to."""
+        and an inlet of this graph are refused with the sentence `connect` would raise). An editor uses it to show which inlets a connection may go to."""
         try:
             self._own_port(outlet, "outlet", "outlet")
             self._own_port(inlet, "inlet", "inlet")

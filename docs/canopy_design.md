@@ -1,6 +1,7 @@
 # CANOPY - design specification, version 1
 
-Status: version 1 specification, FINAL. No code yet. Started 2026-10-02; finalized 2026-10-02 (round 10).
+Status: version 1 specification, FINAL. No code yet. Started 2026-10-02; finalized 2026-10-02 (round 10). Amended at plan step 15 (the final audit), with the author's permission, in sections 2, 3, 5, 7, 8 and 14: each
+amendment is marked "(added at step 15...)" or says "as built"; none changes what version 1 does.
 Every detail here was chosen by the author, or was delegated by the author to the assistant (marked "delegated"). Any change to this design
 needs the author's permission.
 
@@ -20,7 +21,9 @@ needs the author's permission.
 ## 2. Non-goals (explicitly excluded)
 
 CANOPY has no animation system, no keyframes, no timeline, no global playback state, no global notion of "the current time", no menu bar, no
-file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used inside larger programs.
+file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used inside larger programs. (Added at step 15: the package also ships a small
+stand-alone host program, `python -m canopysynth` and `run_editor.bat`, that puts the editor and an engine in a window with a File menu (New, Open, Save,
+Save as, Quit) and saves a graph as JSON. It is a host program like any other, not part of CANOPY's editor, which has no menu bar and writes no file.)
 
 ## 3. Vocabulary
 
@@ -29,7 +32,7 @@ file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used
 | node | A unit of the graph with inlets and outlets. Has an integer node ID. |
 | inlet | A port on a node that the node reads from. Every inlet has a knob. |
 | outlet | A port on a node that can be queried; it answers as a function of the time(s) given in the query. |
-| connection | A link from one outlet to one inlet (shown as an arrow in the editor). Always called "connection" in code and docs. |
+| connection | A link from one outlet to one inlet (the editor draws it as a curve from the outlet to the inlet). Always called "connection" in code and docs. |
 | knob | The control associated with every inlet (section 6). |
 | setting | A saved, non-inlet value of a node: a file path, an audio device, an internal sampling rate (section 12). |
 | BoundaryInletNode | A node through which the HOST writes a value into the graph. It has an outlet inside CANOPY. |
@@ -79,6 +82,8 @@ file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used
      wants and a buffer `out` that it owns with room for `n` floats; the queried node fills exactly `n` floats, resampling if necessary. It
      returns an int status (0 = success). On failure it zero-fills `out` (all `n` floats when `n` is valid) and returns a nonzero status.
   The two are separate calls; a point query is not defined as a special case of a span query. (Node authors reach them through `ctx`, section 12.)
+  (Added at step 15, as decided at step 3: for a node that implements only `query_span`, the engine answers a point query with `query_span(t, t, 1)` and passes
+  its status on; a node that implements both is called through each separately.)
 - Sample placement in a span query: sample `i` (0 <= i < n) is at time `t0 + floor(i * (t1 - t0) / n)`, so the last sample is strictly before
   `t1`. Floor division is mathematical floor (also for negative values). To avoid int64 overflow, compute it with the quotient and remainder of
   `(t1 - t0)` by `n` (`q`, `r`): `t0 + i*q + floor(i*r / n)`.
@@ -121,7 +126,11 @@ file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used
   shared resource) has an atomic generation number that is bumped when it is written (a knob move, a boundary write, a setting change, a file
   open). The compiled graph records, for each node, which sources lie upstream of it. A node's checkpoints store the generation numbers they
   were made under; at the start of a query the node compares them and discards its checkpoints on any mismatch. Nothing is propagated and no
-  registry of instances is needed.
+  registry of instances is needed. (Added at step 15, as built: a node does not read the individual generation numbers. The engine gives it one 64-bit digest of the
+  numbers of every source upstream of it (`canopy_ctx_upstream_stamp`), which the node keeps with its checkpoints and compares; equal digests mean equal numbers
+  except with a probability of 2^-64. The numbers of knob slots, boundary slots and shared resources are atomic; the number of a setting changes only while a graph is
+  being installed. The engine does keep a list of live instances, for the packages of compile-and-swap (section 8); staleness detection itself uses no registry
+  and no notification.)
 - A node that keeps discrete-time state (a filter, an envelope follower...) has an "internal sampling rate" setting: whole Hz, from 1 to
   384000, default 48000. It asks upstream at that rate, does its processing at that rate, and resamples to the requested `n`, so its results
   do not depend on who asks. The internal sample grid is anchored at t = 0 (sample `k` at `k / rate` seconds), so state does not depend on where
@@ -135,7 +144,7 @@ file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used
   loops (a loop whose nodes do not query strictly earlier times can recurse without end, which can crash the host process).
 - Threading model: a graph is compiled into an immutable compiled graph; every thread that queries (the preview's audio thread, each host worker
   thread) uses its own instance over it, so a node is only ever used by one thread at a time and nothing in the audio path needs a lock. Knob
-  positions and boundary values live in one shared table of atomic floats, each slot with its generation number. Live editing during playback is
+  positions and boundary values live in atomic floats, each slot with its generation number (as built: in one record per node ID and node type, not in a single table). Live editing during playback is
   done by compile-and-swap: an edit produces a new compiled graph, and each instance adopts it at the start of its next query; the integer node
   ID lets a node's state carry across the swap.
 - Node data has three scopes: settings (saved with the graph), shared runtime resources (for example the loaded file samples, the audio device
@@ -237,7 +246,8 @@ file exports, no undo/redo, and (to start with) no copy/paste. It is a tool used
     `settings` has the node's settings under permanent keys (including the FileReadNode's absolute path, a node's internal sampling rate and
     the preview's device name).
   - Each connection: `{from: [node_id, outlet_key], to: [node_id, inlet_key]}`.
-- Permanent string keys are used for node types, inlets, outlets and settings. Node IDs are never reused within a graph.
+- Permanent string keys are used for node types, inlets, outlets and settings. Node IDs are never reused within a graph. (Added at step 15, as built: a graph that is loaded goes on numbering from the highest ID in the file, so an ID
+  freed by deleting the highest-numbered nodes before saving can be given to a new node after loading.)
 - Loading a graph that names a node type that is not installed rejects the whole file (version 1).
 - Loading a graph whose WAV file no longer exists is not an error: the node is silent and flagged.
 - Relative paths are not supported in version 1.

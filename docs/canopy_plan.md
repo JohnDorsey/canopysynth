@@ -1,6 +1,6 @@
 # CANOPY - build plan for version 1
 
-Created 2026-10-02. Status: **in progress** (steps 0 to 13 done; step 14, documentation and packaging, is next; build 18 is step 13, the whole-system verification, and one bug it found in the Python bridge; build 17 made the changes the author asked for
+Created 2026-10-02. Status: **in progress** (steps 0 to 14 done; 14b, the compilers experiment, is done; step 15, the final audit, is done and the author has answered its nine differences (see "Step 15" below): **version 1 is complete** (build 20); build 19 is step 14, documentation and packaging; build 18 was step 13, the whole-system verification, and one bug it found in the Python bridge; build 17 made the changes the author asked for
 after trying step 12 with a real device and a bad file; the author's try-out of the step 10 editor and his listening check of step 7 passed).
 The design is `docs/canopy_design.md` (read it before every step). This plan builds exactly that design and nothing else.
 The project folder is `C:\Users\Argh\Documents\ai\projects\canopysynth`; the design and this plan live in its `docs\` folder.
@@ -695,6 +695,163 @@ default device, twice: 29 and 44 ms for the first Play, 52 and 55 ms to close, n
 3. **The suite is slower by about 130 seconds: it takes 209 s on a quiet machine, build included (about 80 s at build 17); the C programs alone are 17 s, 52 s under the debug heap and 72 s under AddressSanitizer, the Python tests 54 s** (the C tests run three times: the determinism tests are 8, 29 and 48 s of that, the stress 3 x 2.5 s; the Python shutdown and real-memory tests 3 s, the Python stress 4 s). The determinism tests are the heavy ones and could be cut to the cheaper graphs;
    the mutation campaigns pay it only in their whole-suite runs and for a fault no test notices.
 
+## Step 14: documentation and packaging (build 19; the author may veto any choice marked "mine")
+
+**The packaging question was asked and answered.** The author wants both audiences served: a **wheel** (`pip install`), and a **folder that works when unzipped**, with a `run_editor.bat`, that Python users can also use
+without pip by putting it on `sys.path`. Also discussed with the author, no code: a Linux build is feasible (the Windows-specific code is the engine and audio locks in `canopy_core.h` and `canopy_audio.c`, the DLL name in
+`_lib.py`, `build.ps1`, and about 15 test files with Windows headers or job objects) but would be a step of its own, and the 12 recorded determinism hashes are MSVC's: gcc and clang may differ (about 50% I said that at
+least one would). The author asked to **re-open the MSVC-versus-gcc-versus-clang question before step 15, as a step "14b" that he will start**: my proposal for it is an experiment only (clang on this Windows machine, the 12 hashes compared, a
+table of differences, no code beyond what the build needs), after which he decides about Linux. Not started.
+
+### What was made
+
+| Piece | Where | What it is |
+|---|---|---|
+| The documents | `README.md`, `docs/user_guide.md`, `docs/node_author_guide.md`, `docs/THIRD_PARTY_NOTICES.txt` | install three ways; the editor and the built-in nodes; the Python API with every call; the two public helper functions documented as such (what they do and how they are useful); sample placement; saving; errors; the rules worth knowing (threads, edits during a query, determinism, loops, memory); trouble. The node author guide: the descriptor field by field, the handlers and which thread runs them, the context calls, scopes of state, history and the upstream stamp, replacing data safely, buttons and messages, using a type from C and from Python, migrations, a checklist |
+| The worked example | `examples/example_node.c`, `examples/use_example_node.py` | a node type written outside the engine (`example.scale`: in x gain + offset, both queries, a scratch buffer, a setting) and the Python that registers it in a registry and queries it. `build.ps1` builds it every time into `build\examples\`, so it cannot stop compiling unnoticed |
+| The section 15 program | `examples/section15.py` | the design's snippet as a program that runs (a test-tone WAV file is made if none is given; `--no-window` for the tests) |
+| The stand-alone editor | `canopysynth/app.py`, `canopysynth/__main__.py`, `run_editor.bat` | `python -m canopysynth [graph.json] [--audio system|null]`: a window with a File menu (New, Open, Save, Save as, Quit; Ctrl+N/O/S), the Editor and a real Engine over the same graph (so the preview plays and the file node opens). Saves the graph as JSON through a temporary file. Asks before discarding changes. `run_editor.bat` finds Python (`py -3`, then `python`), checks it is 64-bit 3.9+ with tkinter and says so if not, and starts the editor without a console (`pyw`); `CANOPY_CONSOLE=1` keeps the console |
+| Packaging | `dev/package.py` | `python dev/package.py` builds, checks the DLL's build number against the source, and writes `dist/canopysynth-1.0.0-py3-none-win_amd64.whl` and `dist/canopysynth-1.0.0-windows-x64.zip` (and the folder it zips). Both hold the same `canopysynth/` package: the Python files, `canopysynth.dll`, `include/` (`canopy.h`, `canopy_node.h`, `canopy_engine.h`) and `lib/canopysynth.lib` (what a C node author builds against). The wheel is written by hand with the standard library (a wheel is a zip with three text files: PEP 427), tag `py3-none-win_amd64`, a `canopysynth-editor` program (`gui_scripts`), the README as long description; the folder adds `run_editor.bat`, `docs/`, `examples/` (with the example node's DLL already built). Same files give the same bytes (every file carries the time 2026-01-01) |
+| Version | `canopysynth/version.py` `VERSION = "1.0.0"`, `canopysynth.__version__` | the release version of the packages; the delivery counter (build 19) is separate and is checked against the DLL, as before |
+
+### What was VERIFIED (ran it)
+
+- `python run_tests.py`: **529 passed, 0 failed** (238 C tests x 3 builds, 291 Python: 21 new: `test_app.py` 10, `test_docs.py` 3, `test_package.py` 8).
+- **The done-when, literally:** a copy of the source with no DLL, no `build\` and no `dist\` (a fresh checkout's files): `python dev/package.py` built the DLL and both packages; a new virtual environment with no pip packages took the wheel (`pip --python ... install --no-index`);
+  `section15.py` (with its window) ran from another folder against the installed copy (`site-packages\canopysynth`, version 1.0.0) and printed `ok`.
+- The wheel: every file in RECORD with the right SHA-256 and size, METADATA, WHEEL tag, entry point, no `__pycache__`/tests; `pip uninstall` removes the DLL. The folder, unzipped to another place: `sys.path` import, `section15.py`, the shipped example node, `run_editor.bat` (with `CANOPY_CONSOLE=1`) prints the help and refuses a bad file named with a space in
+  it with exit code 1; started without the variable it left a `pythonw` window "CANOPY - untitled" and no console (looked at once by hand).
+- The example node compiles in the unzipped folder with the exact command printed in the node author guide (the test reads the command from the guide), without warnings, and the example then queries it correctly.
+- **The DLL imports only `KERNEL32.dll`** (read from the PE import table): it links the C runtime statically (`/LD` implies it), so no Visual C++ redistributable is needed. A test fails if that changes.
+- Every Python example in `README.md` and `docs/user_guide.md` runs, and prints what the text says (`test_docs.py`); the ones not run are exactly those that open a window.
+- Mutation checks: `step14.py` (26 faults in `dev/package.py` and `app.py`): 25 caught by the first run and the 26th (P15, files carrying the time of the day) was a **gap in my test** (the new test compared the zip times with the script's own constant, so a mutated constant agreed with itself): the expected time is now a literal, and
+  the fault is caught (run by hand with the fault in place); `step14b.py` (12 faults in `run_editor.bat`, the example, the documents, FOCUSED): 12 of 12 caught. Left out on purpose and said in the specs: dropping the `__pycache__` test in `package_files` (an equivalent mutant), the
+  version check in the batch file (the tests run on a newer Python), the example's default knob (its script sets the knob).
+
+### Found on the way (all fixed, each by a test)
+
+- `run_editor.bat` returned exit code 0 when the editor refused a file: `%errorlevel%` inside a parenthesised block is the value from before the block. A label and `goto` replace it (noted in CLAUDE.md).
+- The documents had said a `file_read` node loads its file only when Open is pressed. **Measured: a node whose `path` is set is loaded when it first reaches a compiled graph** (so a graph loaded from a file plays at once, and a missing file says so on the node at once); after that only Open reloads it, and changing `path` alone does not. The documents now say exactly that.
+- The messages of the stand-alone editor named a file twice; `read_graph` no longer puts the file's name in its messages (the caller knows it).
+
+### Choices of mine (veto any)
+
+- **A stand-alone editor exists at all.** The design (section 2) says CANOPY has "no menu bar" and is "a tool used inside larger programs"; `app.py` is a small host program around the Editor (like `dev/editor_try.py`), the editor widget itself has no menu bar and is unchanged. The author asked for `run_editor.bat`, which needs something to run; I made it a File menu with New/Open/Save, because an editor that cannot save is of little use.
+- **Release version 1.0.0**, separate from the delivery counter. (A wheel needs a version; "1.0.0" matches "version 1" of the design.)
+- **The wheel is written by hand**, not by setuptools: no network, no build tools, and `pip install` of the result is the test. No `pyproject.toml`, so `pip install .` from a checkout does not work (the DLL is made by `build.ps1`, not by a Python build backend).
+- **The headers and the import library ship inside the package** (`canopysynth/include`, `canopysynth/lib`), so a C node author needs only the package (the headers and the import library are 40 KB beside a 429 KB DLL).
+- **Version 1 has no way for the stand-alone editor to find node plug-ins** (a registry is made by a host; the guide says so). `use_example_node.py` is how a Python host does it, and it uses one private name, `canopysynth._lib.DLL_PATH`.
+- `run_editor.bat` hides the console (`pyw`) unless `CANOPY_CONSOLE=1`; a file that cannot be opened is then shown in a message box (`main` checks that `sys.stderr` is None).
+- No licence file for CANOPY itself (the author has not chosen one); the README says so. The two libraries inside the DLL (dr_wav, miniaudio) are public domain / MIT-0 and are named in `docs/THIRD_PARTY_NOTICES.txt`, shipped in the wheel and the folder.
+- `dist/` is generated: it should be in `.gitignore` (the author keeps that file).
+
+### BELIEVED, not verified
+
+- That the wheel and the folder work on a machine other than this one (only Windows 10, Python 3.11, Visual Studio 2022 installed here); that Python 3.9 and 3.10 run it (the wheel says `>=3.9`; only 3.11 was run); that the Microsoft Store and python.org installs of Python both put `py`/`python` where `run_editor.bat` looks (the new Python install manager on this machine was the one tried).
+- That dropping a graph file on `run_editor.bat` works in Explorer (the arguments are passed with `%*`, quoting kept: tested with a name that has a space, through `cmd /c`, not by the real drop).
+- That the unsigned DLL and batch file do not trip SmartScreen or antivirus on other machines (not signed; not tried).
+
+### For the author
+
+1. A licence for CANOPY itself (none is chosen).
+2. Whether the stand-alone editor should learn to load node plug-ins (an environment variable naming DLLs would do it); version 1 has none.
+3. 14b (the compilers, then Linux) when you want it; step 15 after.
+4. `dist/` in `.gitignore`.
+
+## Step 14b: other compilers (an experiment; no code changed, so no new build number)
+
+**What was asked:** re-open the MSVC-versus-gcc-versus-clang question before step 15. **What was done:** the whole C test suite (src/ and tests/c/, 238 tests) built with other compilers and flags on this machine, run, and the twelve recorded determinism hashes compared with MSVC's. Nothing in the project was changed.
+
+**What was available:** clang 19.1.5 (target x86_64-pc-windows-msvc), found in the Swift toolchain at `%LOCALAPPDATA%\Programs\Swift\Toolchains\6.2.1+Asserts`, used in the Visual Studio environment (its headers and libraries); it is not a Visual Studio component. **gcc was not available** (no MinGW or MSYS2) and **WSL has no distribution installed**, so **gcc and Linux were not tried**.
+
+| Build (all `-std=c11` / `/std:c11`) | C tests | determinism hashes that differ from MSVC's (of 12) |
+|---|---|---|
+| MSVC `/O2 /fp:precise` (the project's, three builds) | 238 / 238 | 0 (they are the recording) |
+| MSVC `/O2 /fp:precise /arch:AVX2` | 238 / 238 | 0 |
+| clang-cl `/O2 /fp:precise` | 238 / 238 | **0** |
+| clang-cl `/Od /fp:precise` | 238 / 238 | **0** |
+| clang (GNU driver) `-O2 -ffp-contract=off` | 238 / 238 | **0** |
+| clang `-O3 -march=native -ffp-contract=off` (this CPU has FMA) | 238 / 238 | **0** |
+| *control:* clang `-O2 -march=native` (the compiler's default, which contracts `a*b+c` into one fused instruction) | 237 / 238 | **3** |
+| *control:* clang `-O3 -march=native -ffp-contract=fast` | 237 / 238 | **6** |
+| *control:* MSVC `/O2 /fp:fast` | 236 / 238 | 1 (and the preview's NaN test fails) |
+| *control:* clang-cl `/O2 /fp:fast` | 233 / 238 | 1 (and the NaN test, and three tests of argument checks that the optimiser removed) |
+
+**What this says (VERIFIED for these compilers and this CPU):**
+- **The recorded hashes are not MSVC's alone.** clang's code gives the same bits as MSVC's for all twelve graphs, optimised or not, as long as floating-point contraction is off, which is what `/fp:precise` gives and what the plain clang-cl and `-ffp-contract=off` builds do. The code needs no change to be built by clang.
+- **The determinism rule is carried by two flags, and the goldens are good at noticing a breach:** letting the compiler fuse multiply-add on a CPU that has it changes the hashes (3 of 12 by clang's default, 6 of 12 forced), and fast-math breaks them and also the NaN and argument-check tests. So a port must say "no fast-math, no contraction" (`-ffp-contract=off`, or `/fp:precise` without `/fp:fast`) in its build, and the existing test fails loudly if it forgets. MSVC does not contract at `/fp:precise`, even with `/arch:AVX2`.
+- **clang found two things MSVC's `/W4 /WX` did not**, both harmless: `src/canopy_fileread.c:116` compares a 32-bit sample rate with `CANOPY_MAX_HELPER_RATE` (9223372036), which is always false (a dead check, kept as a guard); `tests/c/test_registry.c:240` casts a function pointer to another function type (a test that deliberately passes the wrong handler).
+- **The sanitizers of this clang are not usable here:** the toolchain has no Windows runtime libraries for AddressSanitizer or UBSan, so only the compile, the tests and the hashes were checked, not memory behaviour under clang.
+
+**Read from the code (VERIFIED by search, not by a run on Linux):** `src/` and the determinism test call no `sin`, `cos`, `exp`, `log`, `pow` or `sqrt`; the nodes use `+ - * /`, conversions and `fminf`/`fmaxf`, which IEEE 754 defines exactly. So a C library's maths functions (the part that differs between MSVC's and glibc's) cannot move the hashes; what can is fused multiply-add and x87 arithmetic, and a 64-bit build uses SSE. gcc's default in GNU mode is `-ffp-contract=fast` (it fuses where the CPU has FMA: `-std=c11`, the ISO mode, turns it off; say `-ffp-contract=off` anyway).
+
+**NOT verified (believed):** that gcc gives the same bits (not tried: not installed). Given the paragraph above I now put the chance that a Linux build differs in at least one hash at about **10%** (it was 50% before this experiment; the reason is that no maths-library function is involved); that Linux builds at all (the lock and the DLL name in `canopy_core.h`, `canopy_audio.c`, `_lib.py`, `build.ps1` and the Windows-only tests are the known work); anything about ARM or big-endian machines.
+
+**Decision for the author (recommendation, about 70% confident):** keep MSVC as the one supported compiler for version 1 and say in `CLAUDE.md` that clang builds the same bits when contraction is off (done). A Linux port, if wanted, is a step of its own, and its first job is the same experiment with gcc on a real Linux machine (a VM, or WSL installed: `wsl --install`), to learn whether libm changes the hashes before any porting is planned. Nothing else is needed before step 15.
+
+## Step 15: final audit against the design (build 19 audited, build 20 after the author's answers)
+
+**Method.** Every statement of `canopy_design.md` (about 250) was checked against the code and the tests by three readers on separate sections, who read what each cited test really asserts, ran a sample of the tests and threw-away scripts, and reported with evidence; I re-ran the findings that matter (marked "I ran it"). The whole table is in
+`docs/step15_design_audit.md`: status of every statement with its test, the differences, and everything built that the design does not mention.
+
+**Result.** 0 statements not built. 9 differences (below). 7 statements had no test of their own: 3 are closed now by `tests/python/test_audit.py` (the preview keeps playing silence after the end of a file; `canopysynth.Editor` is a `tk.Frame` that packs to the right of a host's own controls and adds no menu bar; the editor shows a plain `GraphError` from the engine and keeps the previous graph running,
+checked to fail when the code is broken); 4 remain untested because no test can see them or none was worth the cost (below). **The full suite: 532 passed, 0 failed** (238 C tests x 3 builds, 294 Python).
+
+**The nine differences, with my recommendation for each (the design is final: any change to its text needs the author's permission).**
+
+| ID | Difference | My recommendation (confidence) |
+|---|---|---|
+| A1 | wires have no arrowheads; the design says a connection is "shown as an arrow" | **Draw an arrowhead at the inlet end** (a one-line change, `arrow=` on the wire, plus a test; the editor tests that look at wires need a check) rather than change the design (80%) |
+| A2 | "connection" is not always the word: "wire" in the editor's internals, the README, two sentences of the user guide and one docstring | **Reword the public text** (README, user guide, the docstring) to "connection"; leave the editor's internal names (`_wire`, canvas tags) (75%) |
+| A3 | `BoundaryInletNode`, `BoundaryOutletNode` and `FileReadNode` are spelled `boundary_inlet`, `boundary_outlet`, `file_read` | **Accept** (the design's own section 15 uses the keys), and add one line to the user guide that maps the vocabulary names to the keys (90%) |
+| A4 | node IDs are reused after save and load (never within a live graph) | **Accept and say so in the design** (an added sentence), or add an optional `"next_node_id"` key to the saved format (the fixture file still loads; this changes section 14). I lean to accepting (60%): a loaded file is a new `Graph` with a new engine, the host links by boundary *name*, and a reused ID cannot meet old engine state |
+| A5 | the preview warns only about non-safe nodes that feed it | **Accept**: a node that does not feed the preview does not run in the audio thread (85%) |
+| A6 | a span-only node answers a point query with a one-sample span (approved at step 3) | **Add one sentence to section 5** so the text matches (needs your permission) (90%) |
+| A7 | a node compares one 64-bit digest, not the generation numbers; the numbers of settings are not atomic | **Add a sentence to section 7** (permission needed). The behaviour is tested; a collision is about 2^-64 per comparison (85%) |
+| A8 | the engine keeps a list of live instances for compile-and-swap; the slots are per node record, not one table | **Add a sentence to sections 7 and 8** (permission needed) (85%) |
+| A9 | the stand-alone editor has a File menu and saves JSON; section 2 says no menu bar and no file exports | **Keep it, and add a sentence to section 2**: "the package also ships a small stand-alone host program, which has a File menu"; the widget has none (70%). The alternative is to remove `app.py`, `__main__.py` and the File menu and ship `run_editor.bat` with an editor that cannot save |
+
+**Untested, remaining (no change proposed):** the callee does not alias, read before write, or keep the `out` pointer, and `CanopyCtx` is not used past its handler (contracts on node authors that no test can see: the built-in nodes were read); a well-behaved feedback loop run to its end through the engine (a probe of one gave the right answer; the suite only runs loops that stop by scratch exhaustion);
+that `on_action` runs on the calling thread (not asserted); the real Windows file dialog (tests replace it); Alt+wheel and touchpad deltas on real hardware (synthetic events only: "believed").
+
+**Also noted, no decision needed:** the knob's raw value is shown on hover, while dragging and in the typing box (plan step 11 decision 2); after a failed Open the editor has already stored the new path in the node's `path` setting while the engine keeps the old sound (the author tried it at step 12 and was content); `Engine.set_knob` is overwritten by the next `Engine.update()` (the Graph's knob is
+written back: documented in the user guide, and the editor writes both); the miniaudio conversion of 48000 Hz to a device's own rate is checked only by the listening check.
+
+**The author's answers (after the audit):** **A1: remove the arrow language from the design; keep the connections as drawn** (done: section 3 now says the editor draws a connection as a curve from the outlet to the inlet). **A2 to A9: my recommendations accepted, and permission given to change the design text accordingly.** Done: A2 the public text says
+"connection" (README, user guide, the docstring of `Graph.can_connect`; the editor's internal names `_wire` and the `wire:` canvas tags stay); A3 one line in the user guide maps the design's names to the type keys; A4 a sentence in section 14 (a loaded graph goes on numbering from the highest ID in the file); A5 accepted, no text; A6 a sentence in section 5 (a span-only node
+answers a point query with `query_span(t, t, 1)`); A7 and A8 sentences in sections 7 and 8 (the digest, the atomicity of each kind of generation number, the engine's list of instances, one record per node rather than one table); A9 a sentence in section 2 (the stand-alone host program has a File menu; the editor has none). Every amendment in `canopy_design.md` is marked "added at step 15"
+or "as built", and the status line of the design says so. **The delivery counter went to 20** (a docstring changed). The full suite after the amendments: 532 passed, 0 failed.
+
+**Done when:** the table is complete (**met**: `docs/step15_design_audit.md`) and the author accepts the audit (**met**: the answers above).
+
+## Versioning rules (written at the author's request after step 15; they govern every change from here on, including a version 2)
+
+CANOPY has five independent version numbers, one for each contract. They are not tied to each other, and none is derived from another. A release states which values of the others it supports.
+
+| Number | Now | Where | Form | Checked by |
+|---|---|---|---|---|
+| **Release version** (`VERSION`, `canopysynth.__version__`, the wheel and zip names) | `1.0.0` | `canopysynth/version.py` | semantic: MAJOR.MINOR.PATCH | nothing (it is for people and for pip) |
+| **Saved-graph format** (`"version"` in a saved file, beside `"format": "canopysynth-graph"`) | `1` | design section 14, `graph.py` | one integer | `Graph.from_dict` refuses a newer one |
+| **Descriptor layout** (`CANOPY_ABI_VERSION`, `ABI_VERSION`; every descriptor's `abi_version` and `struct_size`) | `2` | `canopy_node.h`, `version.py` | one integer | the DLL's export is compared when it is loaded; the registry refuses another layout |
+| **Node type version** (`type_version`, saved with every node) | per type, from 1 | each node type's descriptor | one integer per type | migrations bring an older saved node up to date, one version at a time |
+| **Delivery counter** (`CANOPYSYNTH_BUILD`) | `20` | `src/canopy.h`, `canopysynth/version.py` | one integer | Python refuses a DLL whose counter differs; a test checks the two files agree |
+
+"Version 1" and "version 2" in the design mean the generation of the specification. They are not one of the five numbers; the release major version and the file format version both start at 1 for that reason, and may drift apart.
+
+**What raises each number:**
+
+- **Release version, MINOR:** something is added that breaks nothing: a new node type, a new function or option, a new setting with a default. Existing programs and files keep working.
+- **Release version, PATCH:** a fix, with no change to what anything promises.
+- **Release version, MAJOR:** an incompatible change to the Python API or the C API (a removed or renamed call, a changed meaning, a changed exception), or a decision that old programs must change. **A new major version may drop support for old file formats and descriptor layouts, but it should say so.**
+- **Saved-graph format:** the layout of a saved file changes in a way an older reader cannot understand. **The program must go on reading every older file version** (the hand-written version 1 fixture `tests/python/fixtures/graph_v1.json` is the test; each new file version adds a fixture of its own). A change that only adds an optional key with a default is not a new format version: it is a minor release.
+- **Descriptor layout:** the node-type descriptor struct or the contract of a handler changes (the change from 1 to 2 was a point query returning a status). A new field at the end of the struct, read by size, may not need it; a changed meaning always does.
+- **Node type version:** that type's ports or settings change; a migration from the old version is registered with it (design section 12).
+- **Delivery counter:** once per finished piece of work that changed code, as before. It says nothing about compatibility.
+
+**Rules:** a change that breaks compatibility of the contract it touches raises that contract's number, never another's by accident. A release that raises the MAJOR number lists, in the plan, which file versions and descriptor layouts it still reads. The two pieces of text that say "version 1" in the design are not rewritten when the release version changes.
+
+**Names:** in `1.0.0` the three parts are the **major**, **minor** and **patch** numbers (the project's own words above); the whole form is called semantic versioning (SemVer).
+
 ## Questions still to ask, and where
 
 (Answered at step 2: atomics = C11 stdatomic; no Python tier in version 1. Answered at step 4: how an instance adopts a new graph. Answered at step 7:
@@ -702,7 +859,7 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
 
 | Question | Step |
 |---|---|
-| Package distribution format for the prebuilt DLL (wheel, a plain folder...) | 14 |
+| Package distribution format for the prebuilt DLL (wheel, a plain folder...) | 14: answered (both: a wheel, and an unzip-and-run folder with `run_editor.bat` that also works from `sys.path`) |
 
 ## Steps (one prompt each, unless stated; the effort level is what to set BEFORE telling me to continue)
 
@@ -1182,15 +1339,15 @@ how the preview's run-time list of devices reaches a CHOICE widget.)
       All five were made, each with a mutation spec of its own, and the measurements are in "Step 13: what was verified and measured" above and in `docs/step13_measurements.txt`.
 - Done when: all checks pass and the measurements are recorded here. **Met:** 508 tests pass (238 C tests, each also under the debug heap and AddressSanitizer, and 270 Python); one bug found and fixed.
 
-### Step 14 - documentation and packaging. Recommended effort: MEDIUM-HIGH
-- [ ] Ask the packaging question. Write the user documentation (the public helper functions documented as such), a node-author guide for the
-      registration API, and the packaging.
-- Done when: a fresh checkout builds, installs and runs the section 15 snippet.
+### Step 14 - documentation and packaging. Recommended effort: MEDIUM-HIGH - DONE (build 19)
+- [x] Ask the packaging question. Write the user documentation (the public helper functions documented as such), a node-author guide for the
+      registration API, and the packaging. All made and tested: see "Step 14: documentation and packaging" above.
+- Done when: a fresh checkout builds, installs and runs the section 15 snippet. **Met** (run on a copy of the source with no build output; the wheel installed with pip into a new environment).
 
-### Step 15 - final audit against the design. Recommended effort: HIGH
-- [ ] Walk `canopy_design.md` statement by statement against the "Design coverage" table; list anything unbuilt or built but not in the design;
+### Step 15 - final audit against the design. Recommended effort: HIGH - DONE (build 20)
+- [x] Walk `canopy_design.md` statement by statement against the "Design coverage" table; list anything unbuilt or built but not in the design;
       ask the author about each difference.
-- Done when: the table is complete and the author accepts the audit.
+- Done when: the table is complete and the author accepts the audit. **Met** (`docs/step15_design_audit.md`; the nine answers are in "Step 15" above).
 
 ## Reserved for later versions (decided with the author after step 8; nothing here is scheduled, and the design is unchanged)
 
@@ -1225,7 +1382,7 @@ the result) run under the lock; `canopy_audio_open` and `canopy_audio_close` run
 
 | Design section | Step(s) |
 |---|---|
-| 1 What CANOPY is, 2 Non-goals | all (R1); audited in 15 |
+| 1 What CANOPY is, 2 Non-goals | all (R1); audited in 15: all hold for the widget; the stand-alone host program differs (A9) |
 | 3 Vocabulary | 14 (documentation uses the terms) |
 | 4 Time (helpers) | 1 |
 | 5 Queries (point, span, errors, determinism, `out`) | 1, 3, 9 |
@@ -1240,7 +1397,7 @@ the result) run under the lock; `canopy_audio_open` and `canopy_audio_close` run
 | 14 Serialization | 8 |
 | 15 Python API | 8, 9, 12 |
 | 16 Errors | 3, 6, 8, 9, 12 |
-| 17 Not in version 1 | not built (audited in 15) |
+| 17 Not in version 1 | not built (audited in 15: absent, except that a worked example node ships beside the package) |
 
 ## Progress log (update at the end of every step)
 
@@ -1261,5 +1418,5 @@ the result) run under the lock; `canopy_audio_open` and `canopy_audio_close` run
 | 12 | done (build 16); the author's real-device try-out found two problems, fixed at build 17 (next row) | Compile and swap on every edit, live knobs, Play / Pause / device list / time field of the preview node, Open... of the file node with its name row, notes under nodes, Delete selected, `Graph.engines()`, `dev/editor_try.py`; 112 faults of `step12.py` and the older specs all caught; 450+ tests green |
 | 12b | done (build 17) | After the author's try-out of step 12: a new boundary node is named default0, default1, ... and the editor refuses an empty name or one another boundary node has (option C); the mutation runner made faster (stop at the first failure, no C tests after a change to a Python file, cheapest tests first: 8.8 times faster per fault on the editor specs, 2.2 times on C code) and corrected (a stale DLL after a C mutation, skipped mutations, the exit code, mutations of run_tests.py itself); `test_runner.py` (18), `step12b.py` (26), `runner.py` (75), `known.py` (4); 475 tests green; the older Python specs and `step9.py` run again, all caught after two test gaps were closed |
 | 13 | done (build 18) | Determinism recordings (twelve whole graphs, hashes checked by the three C programs and by the Python API), the multi-thread stress in C (10 minutes: 3.78 million checked queries, 47540 installs, 462 million boundary writes, no problem; AddressSanitizer 5 minutes) and in Python (the editor making random edits while threads write and read), a fuzz of the public Python API (found and fixed: node IDs and action names of five `Engine` calls were not checked, and an ID beyond 64 bits pressed another node's button), a sweep of all 63 exported C functions with NULL and extreme arguments, the export table against the headers and the ctypes declarations, process end and real out-of-memory tests, overrun and WAV-fuzz tests, `cl /analyze`; 7 focused mutation specs (62 faults, all caught: 61 by the test written for them, T04 by the tests of retiring; three gaps in my tests were found and closed on the way); timings recorded; 508 tests green |
-| 14 | not started | |
-| 15 | not started | |
+| 14 | done (build 19) | README, user guide, node author guide, a worked C node with its Python use, the section 15 program, the stand-alone editor (`python -m canopysynth`, `run_editor.bat`), `dev/package.py` (a wheel and an unzip-and-run folder), 21 new tests (529 in all), 38 deliberate faults (37 caught first time, 1 gap in my test found and closed), a fresh-copy build, install and run |
+| 15 | done (build 20): audit done at build 19, the author's answers applied at build 20 | 250 statements checked by three readers and re-run where it mattered; 0 not built, 9 differences with recommendations, 3 gaps in the tests closed (`test_audit.py`, 3 tests), the full table in `docs/step15_design_audit.md` |
