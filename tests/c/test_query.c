@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: point and span queries through the engine (docs/canopy_design.md sections 5 and 6): knob fallback, sample placement, pointwise nodes,
    span-only nodes, error statuses and zero-fill, lookahead, fan-out, determinism, the ownership of `out`. */
 #include <stdlib.h>

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The realtime preview node (design sections 8, 9 and 11): plays what is connected to its inlets left, right and center to an audio device.
      State            The only playback state of CANOPY lives in this node's shared resource: a position (a frame count at 48000 Hz, so the
                       time is exact for every millisecond), whether it plays, and the device. The node has no outlets, so no other node can see it.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of the two runners themselves (the changes that make mutation campaigns fast: run_tests.py's --fail-fast, --no-c, --record-times and
 --order-by-times, and mutate.py's fast order, its check of that order, its rebuild after a mutation of a C file): run with
     python dev/mutation/mutate.py dev/mutation/runner.py

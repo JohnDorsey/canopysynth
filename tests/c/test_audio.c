@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The audio device layer (src/canopy_audio.c, plan step 7) on miniaudio's null backend: a device that takes audio in real time and plays it
    nowhere, so these tests need no sound hardware. The real system is only listed (what it lists depends on the machine). */
 #include <process.h>

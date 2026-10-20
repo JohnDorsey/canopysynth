@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The multi-thread stress (plan step 13): everything a host and an editor do at once, one engine, with every answer checked.
 
    Threads (all at once, for a few seconds in the test suite and as long as asked in tests/stress/stress_main.c):

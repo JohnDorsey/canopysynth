@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the hidden test filter of the DLL (a one-pole low-pass with unbounded memory and checkpoints, src/canopy_test_nodes.c) through ctypes,
 against an independent model written here in Python: exact integer arithmetic for the grid times and the position between two samples,
 float32 arithmetic emulated step by step. It checks that answers never depend on how the filter was asked (start points, densities,

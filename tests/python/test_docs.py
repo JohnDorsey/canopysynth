@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the code in the user documents runs (plan step 14). Every ```python block of README.md and docs/user_guide.md is run in a fresh Python process
 from the project folder, unless its first line says `# not run`, and prints what the text says it prints; the node author guide's build command for the example node
 is the one test_package.py compiles it with."""

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: the graph description, compiling and installing it, engine and instance lifecycle, knobs, settings, actions
    (docs/canopy_design.md sections 6, 8, 12, 14 and 16). */
 #include <math.h>

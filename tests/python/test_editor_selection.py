@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: selecting nodes by dragging a rectangle on the background, and moving the selection together (the author's request after the step 11 try-out),
 in a real off-screen window driven with synthetic events, using the helpers of test_editor.py. The sample graph is the one of test_editor.py: file_read at
 (0, 40), vendor.safe at (250, 20), boundary_outlet at (500, 40), vendor.slow at (250, 200), boundary_inlet at (0, 250); the view is at scale 1, offset (50, 60)."""

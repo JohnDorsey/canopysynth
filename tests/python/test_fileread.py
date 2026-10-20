@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the FileReadNode through ctypes, against an independent model written here: WAV files of every accepted format are generated with
 struct (no audio library), and what the node answers at many times and span densities is compared bit for bit with the model's linear
 interpolation (exact position between two frames, float32 arithmetic as in the node). Also the refused files, the messages, and when the file is

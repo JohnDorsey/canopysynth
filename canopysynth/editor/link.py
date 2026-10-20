@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """What an editor does with an Engine made over the same Graph (plan step 12; design sections 8, 9, 11 and 15). No drawing in here: the Editor draws, this
 class talks to the engine.
 

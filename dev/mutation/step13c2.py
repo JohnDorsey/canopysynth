@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Fault T04 of step13c.py (collecting retired blocks does not wait for the queries that could read them) again, judged by the C tests of retiring (test_retire.c: the ones about replaced data, whose names do not say retire) instead of the stress:
 the 2.5 s stress in the suite does not find it (the window is a query that is still reading a block that was retired a few milliseconds before, and the stress's file
 spans are short), but the tests of retiring hold a query inside the node and then retire its data, which finds it at once. Run with

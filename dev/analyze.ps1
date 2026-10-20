@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Runs MSVC's static analyzer (/analyze: buffer overruns, null pointers, uninitialised reads, leaks and the like) over every C source of the library,
 # with the flags of build.ps1, and prints what it finds in our own files (src\). Nothing is built: the objects go to a scratch folder.
 #   powershell -ExecutionPolicy Bypass -File dev\analyze.ps1

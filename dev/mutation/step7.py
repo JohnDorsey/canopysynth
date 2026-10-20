@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of plan step 7 (the realtime preview node, the audio device layer, the engine's own instances): run with
     python dev/mutation/mutate.py dev/mutation/step7.py
 Every one of them should be reported as caught; see mutate.py. (A name starting V is canopy_preview.c, A canopy_audio.c, E canopy_engine.c,

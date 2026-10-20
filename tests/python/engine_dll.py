@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """ctypes bindings of the graph / engine / instance API (src/canopy_engine.h and the context calls of src/canopy_node.h) and a way to write
 node types in Python, for the tests. Python nodes are only for tests: the real Python bridge is plan step 9, and version 1 has no Python tier.
 

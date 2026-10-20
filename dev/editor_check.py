@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The real-window check of plan steps 10 to 12 (and the way to try the editor by hand).
 
     python dev/editor_check.py            opens a window and drives it with synthetic mouse events while you watch: draws a graph, moves a node,

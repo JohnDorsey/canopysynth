@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of the changes made after the author's try-out of step 11 (an inlet that has a connection shows no knob; rectangular selection and
 moving the selection together): run with
     python dev/mutation/mutate.py dev/mutation/step11b.py

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The hidden, test-only node types (design section 11: "a hidden, test-only stateful node exists so that the generation numbers and checkpoints
    are exercised by the tests"). They are registered only by canopy_registry_add_test_nodes(), so no editor or host listing sees them.
 

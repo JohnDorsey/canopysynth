@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of the changes made after the author's try-out of step 12 (a boundary node is added under a name of its own, default0, default1, ..., and
 the editor refuses an empty name and a name another boundary node has): run with
     python dev/mutation/mutate.py dev/mutation/step12b.py

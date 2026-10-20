@@ -31,7 +31,7 @@ The project folder is `C:\Users\Argh\Documents\ai\projects\canopysynth`; the des
   newer, tested on 3.11 (the author chose Windows-only after the trade-offs were explained; the Python minimum was not separately confirmed).
 - Layout: `docs/`, `src/`, `third_party/`, `canopysynth/` (Python package + built DLL), `tests/c/`, `tests/python/`, `build/`, `build.ps1`, `run_tests.py`.
 - Tests: one command, `python run_tests.py` (builds, runs the C tests and the Python tests, prints one total).
-- Delivery counter: `CANOPYSYNTH_BUILD`, as in light_bounces (+1 per finished prompt that changed code), in `src/canopy.h` and `canopysynth/version.py`.
+- Delivery counter: `CANOPYSYNTH_BUILD`, as in PrismaticFractals (+1 per finished prompt that changed code), in `src/canopy.h` and `canopysynth/version.py`.
 - Version control: none for now.
 - Vendoring miniaudio.h and dr_wav.h moves from step 0 to the steps that first need them (dr_wav at step 6, miniaudio at step 7); each download
   needs the author's explicit permission (filename, source, size), and their licenses are recorded then.
@@ -742,7 +742,7 @@ table of differences, no code beyond what the build needs), after which he decid
 - **The headers and the import library ship inside the package** (`canopysynth/include`, `canopysynth/lib`), so a C node author needs only the package (the headers and the import library are 40 KB beside a 429 KB DLL).
 - **Version 1 has no way for the stand-alone editor to find node plug-ins** (a registry is made by a host; the guide says so). `use_example_node.py` is how a Python host does it, and it uses one private name, `canopysynth._lib.DLL_PATH`.
 - `run_editor.bat` hides the console (`pyw`) unless `CANOPY_CONSOLE=1`; a file that cannot be opened is then shown in a message box (`main` checks that `sys.stderr` is None).
-- No licence file for CANOPY itself (the author has not chosen one); the README says so. The two libraries inside the DLL (dr_wav, miniaudio) are public domain / MIT-0 and are named in `docs/THIRD_PARTY_NOTICES.txt`, shipped in the wheel and the folder.
+- (Settled after step 15: CANOPY is GPL-3.0-or-later; see "The licence" below.) At step 14 there was no licence file for CANOPY itself. The two libraries inside the DLL (dr_wav, miniaudio) are public domain / MIT-0 and are named in `docs/THIRD_PARTY_NOTICES.txt`, shipped in the wheel and the folder.
 - `dist/` is generated: it should be in `.gitignore` (the author keeps that file).
 
 ### BELIEVED, not verified
@@ -753,7 +753,7 @@ table of differences, no code beyond what the build needs), after which he decid
 
 ### For the author
 
-1. A licence for CANOPY itself (none is chosen).
+1. A licence for CANOPY itself (answered after step 15: GPL-3.0-or-later; see "The licence" below).
 2. Whether the stand-alone editor should learn to load node plug-ins (an environment variable naming DLLs would do it); version 1 has none.
 3. 14b (the compilers, then Linux) when you want it; step 15 after.
 4. `dist/` in `.gitignore`.
@@ -834,7 +834,7 @@ CANOPY has five independent version numbers, one for each contract. They are not
 | **Saved-graph format** (`"version"` in a saved file, beside `"format": "canopysynth-graph"`) | `1` | design section 14, `graph.py` | one integer | `Graph.from_dict` refuses a newer one |
 | **Descriptor layout** (`CANOPY_ABI_VERSION`, `ABI_VERSION`; every descriptor's `abi_version` and `struct_size`) | `2` | `canopy_node.h`, `version.py` | one integer | the DLL's export is compared when it is loaded; the registry refuses another layout |
 | **Node type version** (`type_version`, saved with every node) | per type, from 1 | each node type's descriptor | one integer per type | migrations bring an older saved node up to date, one version at a time |
-| **Delivery counter** (`CANOPYSYNTH_BUILD`) | `20` | `src/canopy.h`, `canopysynth/version.py` | one integer | Python refuses a DLL whose counter differs; a test checks the two files agree |
+| **Delivery counter** (`CANOPYSYNTH_BUILD`) | `21` | `src/canopy.h`, `canopysynth/version.py` | one integer | Python refuses a DLL whose counter differs; a test checks the two files agree |
 
 "Version 1" and "version 2" in the design mean the generation of the specification. They are not one of the five numbers; the release major version and the file format version both start at 1 for that reason, and may drift apart.
 
@@ -851,6 +851,18 @@ CANOPY has five independent version numbers, one for each contract. They are not
 **Rules:** a change that breaks compatibility of the contract it touches raises that contract's number, never another's by accident. A release that raises the MAJOR number lists, in the plan, which file versions and descriptor layouts it still reads. The two pieces of text that say "version 1" in the design are not rewritten when the release version changes.
 
 **Names:** in `1.0.0` the three parts are the **major**, **minor** and **patch** numbers (the project's own words above); the whole form is called semantic versioning (SemVer).
+
+## The licence (decided with the author after step 15, build 21)
+
+**CANOPY is under the GNU General Public License, version 3 or (at the user's option) any later version: SPDX `GPL-3.0-or-later`.** The author asked for GPLv3; "or later" is my choice, offered as the usual one and not objected to (the author may veto it: it is one line in `dev/package.py`, `tests/python/test_license.py`, the README and each file's first line). The host program, PrismaticFractals, is GPLv3 as well.
+
+- `LICENSE` is the FSF's `gpl-3.0.txt`, downloaded from gnu.org on 2026-10-20 (35,149 bytes; the SHA-256 of the LF form is recorded in `tests/python/test_license.py`); CRLF here like every text file, LF inside the wheel.
+- Every source file of ours (`.c`, `.h`, `.py`, `.ps1`, `.bat`; 134 files, the examples included) has the line `SPDX-License-Identifier: GPL-3.0-or-later` first (after a shebang). The batch file has `@rem` so that nothing is printed. `third_party/` is untouched: dr_wav and miniaudio are public domain / MIT-0 and compatible (that comes from `docs/THIRD_PARTY_NOTICES.txt`; I did not re-read their licence texts). There is no copyright line with a name in it: that needs the author's legal name (BELIEVED to be the usual practice: the SPDX line alone does not need one).
+- The wheel's METADATA has `License: GPL-3.0-or-later` and the GPL classifier, and `LICENSE` is in the wheel (`dist-info/licenses/`) and at the top of the zip folder. The metadata stays at version 2.1 (the newer `License-Expression` field needs 2.4; not tried).
+- README has a "Licence" section; the node author guide has a licence item in its checklist. Both say that a program importing the package, or a node built against the headers and loaded into the engine, is in the FSF's view a combined work, so the GPL applies when it is distributed. That is the FSF's published position, as I know it, not legal advice, and nothing was checked with a lawyer.
+- The release version stays `1.0.0`: nothing was tagged or released before this (no tag in git), so no released file had other terms. The delivery counter went to 21.
+- Verified: the whole suite 538 passed, 0 failed (532 before + 6 new tests); `dev/mutation/step16.py`: 13 faults, all caught, the restored tree green. **A flaky test was seen, and it is not caused by this change (VERIFIED in part):** `test_py_when_memory_runs_out_for_real_an_instance_that_cannot_be_made_is_a_memory_error_...` (`test_shutdown.py`: a job-object memory limit 6 MB above what the child holds) failed three times in a campaign copy (once in the whole run, twice in the runner's fast order: a `MemoryError` raised while handling a `MemoryError`) and passed in every other run; on a pristine build of the committed files a fast-order run also ended without a total once, and the test alone passed 6 of 6 on both trees. The cause is not found (BELIEVED: the 6 MB of headroom is too tight when the machine is busy). A campaign whose first checks fail on it only needs to be started again.
+- Not done: `dist/` was not regenerated, so it still holds the build 20 wheel and zip (run `python dev/package.py` for build 21); `canopysynth-plugin-dev` (another project, with its own rules; it vendors an unzipped release and would need the same `LICENSE` and header lines), the licence of that vendored copy, and a copyright holder line.
 
 ## Questions still to ask, and where
 
@@ -1420,3 +1432,4 @@ the result) run under the lock; `canopy_audio_open` and `canopy_audio_close` run
 | 13 | done (build 18) | Determinism recordings (twelve whole graphs, hashes checked by the three C programs and by the Python API), the multi-thread stress in C (10 minutes: 3.78 million checked queries, 47540 installs, 462 million boundary writes, no problem; AddressSanitizer 5 minutes) and in Python (the editor making random edits while threads write and read), a fuzz of the public Python API (found and fixed: node IDs and action names of five `Engine` calls were not checked, and an ID beyond 64 bits pressed another node's button), a sweep of all 63 exported C functions with NULL and extreme arguments, the export table against the headers and the ctypes declarations, process end and real out-of-memory tests, overrun and WAV-fuzz tests, `cl /analyze`; 7 focused mutation specs (62 faults, all caught: 61 by the test written for them, T04 by the tests of retiring; three gaps in my tests were found and closed on the way); timings recorded; 508 tests green |
 | 14 | done (build 19) | README, user guide, node author guide, a worked C node with its Python use, the section 15 program, the stand-alone editor (`python -m canopysynth`, `run_editor.bat`), `dev/package.py` (a wheel and an unzip-and-run folder), 21 new tests (529 in all), 38 deliberate faults (37 caught first time, 1 gap in my test found and closed), a fresh-copy build, install and run |
 | 15 | done (build 20): audit done at build 19, the author's answers applied at build 20 | 250 statements checked by three readers and re-run where it mattered; 0 not built, 9 differences with recommendations, 3 gaps in the tests closed (`test_audit.py`, 3 tests), the full table in `docs/step15_design_audit.md` |
+| licence | done (build 21) | GPL-3.0-or-later: `LICENSE`, an SPDX line in 134 source files, the wheel's metadata and files, the README, the author guide; `tests/python/test_license.py` and `dev/mutation/step16.py`; the old host-program name replaced by PrismaticFractals in the documents: see "The licence" above |

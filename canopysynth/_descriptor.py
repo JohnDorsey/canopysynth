@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """ctypes mirror of the node-type descriptor in src/canopy_node.h, and a reader that turns a registered descriptor into plain Python data.
 
 The C header is the single source of truth: the layout below must match it field for field (a test registers a descriptor built from these

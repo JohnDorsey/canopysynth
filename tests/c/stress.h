@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The multi-thread stress of plan step 13 (tests/c/test_stress.c): everything a host and an editor do at once, with every answer checked. */
 #ifndef STRESS_H
 #define STRESS_H

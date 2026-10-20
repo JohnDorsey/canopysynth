@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The Python-level multi-thread stress (plan step 13): what a host program does at once through the public API, with the real editor making the edits.
 The main thread runs a Tk window with an Editor over a Graph and an Engine (audio on the null backend) and makes random edits through the editor (the
 `random_edit_run` of test_editor_link.py, with all its checks after every edit), presses the preview's buttons and replaces the file the file node holds;

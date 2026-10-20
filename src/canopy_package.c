@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The lifecycle of instances, and the packages that move a running instance to a newly installed graph (see CanopyPackage in canopy_core.h).
    Everything here except canopy_instance_adopt runs with the engine's lock held, in the thread that installs, collects or frees. */
 #include <stdint.h>

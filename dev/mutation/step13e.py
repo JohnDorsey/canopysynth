@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations for what plan step 13's API fuzz found (tests/python/test_api_fuzz.py and the regression test in tests/python/test_engine_controls.py): the five
 Engine calls that the editor uses and that passed their node ID, and the action's name, straight to ctypes. Run with
     python dev/mutation/mutate.py dev/mutation/step13e.py

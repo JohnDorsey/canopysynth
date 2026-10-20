@@ -1,3 +1,4 @@
+@rem SPDX-License-Identifier: GPL-3.0-or-later
 @echo off
 rem Starts the CANOPY node editor (python -m canopysynth) with the package that sits next to this file; nothing needs installing.
 rem   run_editor.bat                       an empty graph

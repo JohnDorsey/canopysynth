@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Builds canopysynth\canopysynth.dll (64-bit) and up to three test programs with MSVC (cl), found through vswhere:
 #   build\examples\example_node.dll  the node type of examples\example_node.c (docs\node_author_guide.md), built against build\canopysynth.lib: it proves the example compiles
 #   build\run_c_tests.exe        the C tests against the optimised library code

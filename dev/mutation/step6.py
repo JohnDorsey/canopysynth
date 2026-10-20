@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of plan step 6 (retiring replaced data, node messages, the FileReadNode): run with
     python dev/mutation/mutate.py dev/mutation/step6.py
 Every one of them should be reported as caught; see mutate.py. (A name starting T is canopy_retire.c, F canopy_fileread.c, I canopy_instance.c,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the two distributions of plan step 14 (dev/package.py): the wheel is a real wheel (pip installs it into a fresh virtual environment, the section 15 program
 runs there, from another folder), the folder runs unzipped (run_editor.bat, `sys.path`, the example node), and the example node of the node author guide
 compiles with the command the guide gives. The packages are made once, in a temporary folder, from the DLL and files the earlier tests use."""
@@ -51,15 +52,17 @@ def test_py_the_wheel_has_the_package_the_dll_the_headers_and_correct_metadata_a
         for needed in ("canopysynth/__init__.py", "canopysynth/__main__.py", "canopysynth/app.py", "canopysynth/engine.py", "canopysynth/editor/canvas.py",
                        "canopysynth/canopysynth.dll", "canopysynth/include/canopy.h", "canopysynth/include/canopy_node.h", "canopysynth/include/canopy_engine.h",
                        "canopysynth/lib/canopysynth.lib", f"{info}/METADATA", f"{info}/WHEEL", f"{info}/RECORD", f"{info}/entry_points.txt",
-                       f"{info}/licenses/THIRD_PARTY_NOTICES.txt"):
+                       f"{info}/licenses/THIRD_PARTY_NOTICES.txt", f"{info}/licenses/LICENSE"):
             assert needed in names, (needed, names)
+        assert wheel.read(f"{info}/licenses/LICENSE") == source_bytes("LICENSE").replace(b"\r\n", b"\n")
         assert not [n for n in names if "__pycache__" in n or n.endswith(".pyc") or n.startswith("tests") or n.startswith("dev")], names
         assert wheel.read("canopysynth/canopysynth.dll") == source_bytes("canopysynth/canopysynth.dll")
         assert wheel.read("canopysynth/version.py") == source_bytes("canopysynth/version.py")
         wheel_text = wheel.read(f"{info}/WHEEL").decode()
         assert "Tag: py3-none-win_amd64" in wheel_text and "Root-Is-Purelib: false" in wheel_text and "Wheel-Version: 1.0" in wheel_text, wheel_text
         meta = wheel.read(f"{info}/METADATA").decode()
-        for line in ("Metadata-Version: 2.1", "Name: canopysynth", f"Version: {VERSION}", "Requires-Python: >=3.9", "Operating System :: Microsoft :: Windows"):
+        for line in ("Metadata-Version: 2.1", "Name: canopysynth", f"Version: {VERSION}", "Requires-Python: >=3.9", "Operating System :: Microsoft :: Windows",
+                     "License: GPL-3.0-or-later", "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"):
             assert line in meta, line
         assert "# CANOPY" in meta                                       # the README is the long description
         assert "canopysynth-editor = canopysynth.app:main" in wheel.read(f"{info}/entry_points.txt").decode()
@@ -91,7 +94,7 @@ def test_py_making_the_packages_twice_gives_the_same_bytes_and_every_file_has_th
 
 def test_py_the_folder_has_run_editor_bat_the_package_the_documents_and_the_examples_and_the_zip_holds_the_same_files():
     folder = made()["folder"]
-    expected = ["run_editor.bat", "README.md", "canopysynth/canopysynth.dll", "canopysynth/__init__.py", "canopysynth/include/canopy_node.h", "canopysynth/lib/canopysynth.lib",
+    expected = ["run_editor.bat", "README.md", "LICENSE", "canopysynth/canopysynth.dll", "canopysynth/__init__.py", "canopysynth/include/canopy_node.h", "canopysynth/lib/canopysynth.lib",
                 "docs/user_guide.md", "docs/node_author_guide.md", "docs/canopy_design.md", "docs/THIRD_PARTY_NOTICES.txt", "examples/section15.py",
                 "examples/example_node.c", "examples/use_example_node.py", "examples/example_node.dll"]
     for name in expected:

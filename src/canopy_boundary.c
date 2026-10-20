@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The two boundary node types (design sections 10 and 11): how the host talks to a graph. Built-in, registered by canopy_registry_new().
      boundary_inlet   the host writes a value to it by name (canopy_engine_set_boundary); its outlet `out` gives that value for any query,
                       whatever t or t0/t1. It accepts any float. The value lives in the boundary slot of the node's record, so it survives

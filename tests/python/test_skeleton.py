@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the skeleton - the DLL builds, loads through ctypes, and agrees with the Python package."""
 import ctypes
 import os

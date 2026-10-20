@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: nothing writes outside the buffer it was given (plan step 13). Every node type of the DLL and of the test suite is asked, through the
    host's calls, for spans of 27 sizes (from 1 to the limit of 65536, with the ones either side of every power of two between) over 16 shapes of
    time (forward, reversed, empty, negative, around zero, enormous, very wide, the exact edges of what fits and one step beyond them), through

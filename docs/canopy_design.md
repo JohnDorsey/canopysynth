@@ -8,12 +8,12 @@ needs the author's permission.
 ## 1. What CANOPY is
 
 - Name: CANOPY = "C Audio Nodes in PYthon". The package name and the Python import name are both "canopysynth".
-- A standalone Python module (it does not depend on light_bounces) for manipulating and analyzing audio and building simple audio effects by
+- A standalone Python module (it does not depend on PrismaticFractals) for manipulating and analyzing audio and building simple audio effects by
   linking nodes together with connections.
 - Embedded in a Python program that already has a tkinter window; it appears as an interactive panel inside that window, next to the host's
   own controls.
 - Its purpose is to be embedded in programs that generate videos, as (1) a source of audio for the video and (2) a source of audio-driven data,
-  an alternative to the host's keyframe system. Example: an ellipse's width in light_bounces could be static, keyframed, or linked to a float
+  an alternative to the host's keyframe system. Example: an ellipse's width in PrismaticFractals could be static, keyframed, or linked to a float
   output of CANOPY.
 - Minimalist. The audio processing is done in C, fast enough to run in realtime (realtime is used only by one specific node, the realtime
   preview node). The visual node editor is written in Python.
@@ -173,7 +173,7 @@ Save as, Quit) and saves a graph as JSON. It is a host program like any other, n
 - BoundaryInletNode: the host writes a value to it by name; that value is what any node receives from the BoundaryInletNode's outlet for any
   query, whatever `t` or `t0`/`t1` it uses. It accepts any float. The host's write is an atomic store, visible to any query that starts after it.
 - BoundaryOutletNode: the host reads from the graph through it, using the same two query kinds as in section 5.
-- CANOPY does not clamp values reaching the host. The host clamps if it needs to; in light_bounces a value is clipped only when it is applied to
+- CANOPY does not clamp values reaching the host. The host clamps if it needs to; in PrismaticFractals a value is clipped only when it is applied to
   a control that is linked to a CANOPY output.
 
 ## 11. Built-in nodes (the whole set for version 1; it is not expanded)

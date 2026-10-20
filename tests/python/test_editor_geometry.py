@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the editor's geometry (plan step 10), which has no Tk in it: the view (zoom and pan), the layout of nodes and ports, hit testing, wires and
 rounded shapes. Expected numbers are worked out by hand from the sizes in canopysynth/editor/theme.py, or from independent references (a
 de Casteljau evaluation of the wire's curve)."""

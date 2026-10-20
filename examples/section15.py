@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The Python API snippet of design section 15, as a program that runs (plan step 14: "a fresh checkout builds, installs and runs the section 15 snippet").
 
     python examples/section15.py               makes a one-second test tone WAV file, builds the graph of the snippet, shows the editor and reads from the graph

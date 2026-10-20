@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the test runner (`run_tests.py`) and the mutation runner (`dev/mutation/mutate.py`) themselves, which every claim of the project rests on. The test runner's
 options for mutation campaigns (--fail-fast, --no-c, --record-times, --order-by-times) are tried on a copy of it in a throwaway project that has six tiny tests of its
 own, so that nothing here depends on the real suite; its C phases and the mutation runner's way of asking for a run and of reading the result are tried with the

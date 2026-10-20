@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The DLL as the Engine and Instance classes use it: loaded and version-checked once (`_lib.load_dll`), with the argument and result types of
 every function declared, and the status codes of src/canopy.h.
 

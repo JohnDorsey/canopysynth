@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the stand-alone editor of plan step 14 (canopysynth/app.py: `python -m canopysynth`, run_editor.bat): saving and loading a graph as JSON, the File
 menu's commands with the dialogs replaced, an engine that follows the window, and the command line. Windows are off-screen and the audio is null."""
 import contextlib

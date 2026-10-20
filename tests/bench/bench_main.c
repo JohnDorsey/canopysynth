@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The timing measurements of plan step 13 (what the engine costs: queries, threads, installs, writes during installs, the preview's callbacks, files, deep chains,
    the real audio device). Built by `build.ps1 -Bench` as build\bench.exe, with the optimiser (/O2), from the library sources, tests\c\support.c (the test node
    types: gain, sum, const, saw, and the hidden filter) and this file; `dev/measure.py` runs it and the Python-level measurements and prints the report.

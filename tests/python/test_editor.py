@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the editor widget (plan step 10), in a real tkinter window placed far off the screen (so nothing flashes) and driven with synthetic mouse
 and wheel events: what is drawn (looked at through the canvas items and their tags), moving nodes, making connections by dragging (with the refused
 ones, the reasons, and the marking of ports while a wire is dragged), zoom and the three kinds of panning, the add-node menu, and the messages.

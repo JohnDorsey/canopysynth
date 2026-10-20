@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Mutation check: breaks the library in small, specific ways, one at a time, runs the test suite after each, and reports whether the
 tests noticed. A test suite that stays green with a deliberate fault in the code it covers is not testing that code.
 

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The library's private structures: shared by canopy_graph.c, canopy_engine.c, canopy_install.c and canopy_instance.c. Not exported, not for
    hosts or node authors (they use canopy_engine.h and canopy_node.h). */
 #ifndef CANOPY_CORE_H

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The editor widget (design sections 13 and 15): a tkinter Frame that shows a Graph as nodes and wires and edits it.
 
 What it does (plan steps 10 and 11): draws the nodes (a title bar, ports, the knob of every unconnected inlet in a pill to the left of the node, the

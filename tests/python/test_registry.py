@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the node-type descriptor seen from Python (ctypes mirror), the registry through the DLL, and the version checks."""
 import ctypes
 import os

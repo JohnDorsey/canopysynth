@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Guidance for Claude Code when working in this folder. canopysynth is a standalone package (C engine + Python tkinter editor); it does not depend on
-light_bounces. The specification is `docs/canopy_design.md` (FINAL; any change needs the author's permission) and the build plan, its rules and its
+PrismaticFractals. The specification is `docs/canopy_design.md` (FINAL; any change needs the author's permission) and the build plan, its rules and its
 progress log are `docs/canopy_plan.md`: read the plan before every step and follow its reporting rule (end every step's summary with the next step and
 the effort level to recommend).
 

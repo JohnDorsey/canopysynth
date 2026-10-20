@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the graph model (plan step 8, design sections 14 and 15): nodes, connections, settings, knobs, IDs, loop protection, boundary names,
 the saved form (a golden dict, a hand-written file pinned as a fixture, round trips through JSON), every rejection, migrations by type version,
 and a cross-check against the real engine (what the model allows, the engine compiles; what the model calls a fault, the engine does too).

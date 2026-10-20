@@ -37,7 +37,7 @@ already stored the new path in the node's `path` setting while the engine goes o
 | # | Statement | Status | Evidence |
 |---|---|---|---|
 | 1.1 | name CANOPY; package and import name `canopysynth` | TESTED | TP package: wheel metadata `Name: canopysynth`, pip install and import from a fresh venv |
-| 1.2 | standalone, no dependency on light_bounces | UNTESTED (absence, by search: no occurrence anywhere) | the wheel installs with `--no-deps` and runs |
+| 1.2 | standalone, no dependency on PrismaticFractals | UNTESTED (absence, by search: no occurrence anywhere) | the wheel installs with `--no-deps` and runs |
 | 1.3 | manipulating audio and building effects by linking nodes | N/A | the mechanism exists; version 1 has 4 nodes and no processing nodes (17) |
 | 1.4 | embedded in a tkinter program, as a panel next to the host's controls | TESTED (CLOSED) | `Editor(tk.Frame)`; `test_audit`: `the_editor_is_a_tk_frame_that_packs_to_the_right_of_the_hosts_own_controls` |
 | 1.5 | purpose: audio for the video, audio-driven data | N/A | the mechanism is section 15 |
@@ -205,7 +205,7 @@ already stored the new path in the node's `path` setting while the engine goes o
 | 10.6 | the write is an atomic store | TESTED | TC boundary: readers in other threads; TP boundary |
 | 10.7 | a boundary outlet reads with the same two query kinds | TESTED | TC boundary |
 | 10.8 | nothing is clamped | TESTED | TC boundary |
-| 10.9 | light_bounces clips only when applying | N/A | about a host |
+| 10.9 | PrismaticFractals clips only when applying | N/A | about a host |
 | 11.1 | the file node reads WAV only | TESTED | TP fileread |
 | 11.2 | an "open" button | TESTED (the real file dialog is replaced by `file_chooser` in tests; the author used it) | TP editor_link |
 | 11.3 | the whole file is loaded into memory | TESTED | TP shutdown (memory refusal) |

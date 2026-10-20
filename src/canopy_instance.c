@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Queries: the point and span queries with their error rules (design section 5), the context handed to node handlers (section 12) and the
    scratch arena (section 8). Nothing in the query path allocates, frees or locks (the lifecycle of instances is in canopy_package.c). */
 #include <stdint.h>

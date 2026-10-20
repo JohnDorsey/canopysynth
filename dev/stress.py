@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The Python-level multi-thread stress of plan step 13 for as long as asked: the real editor (in an off-screen window) makes random edits through the public API
 while threads write a boundary inlet, read what it feeds, replace the file node's file and ask the engine what it holds (see tests/python/stress_threads.py for
 what is checked). Prints what was done; exit code 0 if every check held, 1 if not (the problems are printed), 3 if the watchdog found the main thread or all the

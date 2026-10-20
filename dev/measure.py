@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The timing measurements of plan step 13: what the Python bridge and the editor cost, and a runner for the C measurements of build\\bench.exe
 (`powershell -File build.ps1 -Bench` builds it). The numbers are for the machine and the build they were taken on; they say how a cost grows with the size of
 the graph and what a host can expect of a call.

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The FileReadNode (design sections 11 and 16): a .wav file held whole in memory, answering point and span queries on two outlets.
      Formats      PCM 8, 16, 24 and 32 bits and 32-bit float, read with dr_wav and converted to float32 (8-bit PCM is unsigned, as in WAV). Anything
                   else is refused with a message. Mono feeds both outlets; with more than two channels the first two are used.

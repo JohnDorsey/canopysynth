@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of plan step 12 (the editor with an Engine: compile and swap, live knobs, buttons, the preview's time field and devices, the file node's Open,
 the notes under nodes; the Engine bridge calls; the time text; Delete selected): run with
     python dev/mutation/mutate.py dev/mutation/step12.py

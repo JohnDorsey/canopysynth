@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* A node type written by someone other than the engine's authors: the worked example of docs/node_author_guide.md.
 
    "example.scale" has two inlets, `in` (the signal) and `gain` (default knob position 0.5), one outlet, `out`, and one setting, `offset`:

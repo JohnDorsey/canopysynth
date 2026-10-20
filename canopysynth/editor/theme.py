@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """How the editor looks: colours and sizes in one place. Sizes are in world units (pixels at zoom 1); the view scales them.
 
 The look follows the author's mock-up (plan step 10): a dark background, grey nodes with a black outline and rounded corners, diamond ports,

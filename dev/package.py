@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Makes the two distributions of plan step 14 from the built project: a wheel and an unzip-and-run folder (as a zip).
 
     python dev/package.py                  builds the DLL (build.ps1), then writes dist/canopysynth-1.0.0-py3-none-win_amd64.whl and
@@ -28,6 +29,7 @@ TAG = "py3-none-win_amd64"
 FIXED_TIME = (2026, 1, 1, 0, 0, 0)               # every file in a zip gets this time, so that two runs on the same files make the same bytes
 HEADERS = ("canopy.h", "canopy_node.h", "canopy_engine.h")           # what a C author needs (canopy_internal.h and canopy_core.h are not for hosts)
 SUMMARY = "CANOPY: a node graph of audio and control values, with a C engine and a tkinter editor (Windows)"
+LICENSE_ID = "GPL-3.0-or-later"                  # the SPDX identifier: the same text is at the top of every source file and in the wheel's METADATA
 
 
 def read_version():
@@ -101,6 +103,8 @@ def metadata(version):
         f"Version: {version}",
         f"Summary: {SUMMARY}",
         "Requires-Python: >=3.9",
+        f"License: {LICENSE_ID}",
+        "Classifier: License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Classifier: Programming Language :: Python :: 3",
         "Classifier: Operating System :: Microsoft :: Windows",
         "Classifier: Topic :: Multimedia :: Sound/Audio",
@@ -131,6 +135,7 @@ def write_wheel(files, version, out):
     entries[f"{info}/WHEEL"] = to_bytes(wheel_file(version))
     entries[f"{info}/entry_points.txt"] = to_bytes(ENTRY_POINTS)
     entries[f"{info}/top_level.txt"] = to_bytes(NAME + "\n")
+    entries[f"{info}/licenses/LICENSE"] = to_bytes(text_file(os.path.join(ROOT, "LICENSE")))
     entries[f"{info}/licenses/THIRD_PARTY_NOTICES.txt"] = to_bytes(text_file(os.path.join(ROOT, "docs", "THIRD_PARTY_NOTICES.txt")))
     record = "".join(f"{name},{record_hash(data)},{len(data)}\n" for name, data in entries.items()) + f"{info}/RECORD,,\n"
     entries[f"{info}/RECORD"] = record.encode("utf-8")
@@ -155,6 +160,7 @@ def make_folder(files, version, out):
     extras = {
         "run_editor.bat": os.path.join(ROOT, "run_editor.bat"),
         "README.md": os.path.join(ROOT, "README.md"),
+        "LICENSE": os.path.join(ROOT, "LICENSE"),
         "docs/user_guide.md": os.path.join(ROOT, "docs", "user_guide.md"),
         "docs/node_author_guide.md": os.path.join(ROOT, "docs", "node_author_guide.md"),
         "docs/canopy_design.md": os.path.join(ROOT, "docs", "canopy_design.md"),

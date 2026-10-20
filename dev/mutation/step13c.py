@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations for plan step 13's multi-thread stress (tests/c/test_stress.c), as a FOCUSED campaign (see mutate.py: ARGS and ENV): only the stress test judges
 each fault, in the three C builds (normal, debug heap, AddressSanitizer). Run with
     python dev/mutation/mutate.py dev/mutation/step13c.py

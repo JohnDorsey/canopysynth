@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the editor with an Engine made over the same Graph (plan step 12), in real off-screen windows and with miniaudio's null backend (nothing is
 heard): edits compile and swap, a graph that cannot be compiled leaves the previous one running, knobs reach the engine live, the preview node's buttons,
 time field and device list, the file node's Open..., the notes shown under nodes, and the engines' life with the editor's. Helpers come from test_editor.py,

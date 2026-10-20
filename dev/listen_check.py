@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The listening check of plan step 7: plays test sounds through the realtime preview node on a REAL audio device, so that a person can hear
 that it does what the design says. (The automated tests use miniaudio's null backend, which plays the audio nowhere; nobody but you can hear this.)
 

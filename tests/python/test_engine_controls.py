@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the calls of `Engine` that the editor uses (plan step 12) against the real DLL: live knob writes, actions and node messages, collect, the audio
 backend and its devices, and the preview node's state, time and warning. Audio always goes through miniaudio's null backend (no sound hardware, nothing
 audible). Timing assertions are loose: a few hundred milliseconds of real time on a machine that may be busy."""

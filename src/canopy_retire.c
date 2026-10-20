@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Two things a node needs when other threads are around:
      retiring data   A node that replaces data its queries read (the loaded file, when "open" is pressed again) publishes the new data with an
                      atomic pointer swap and hands the old block to canopy_ctx_retire(). The block is freed once no query that began before the

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Installing a compiled graph (compile-and-swap, design section 8), and freeing what is no longer used. Everything here runs with the engine's
    lock held exclusively.
 

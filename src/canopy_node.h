@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* canopysynth - the node-type descriptor and the registry (docs/canopy_design.md section 12).
 
    A node type is described by one CanopyNodeType. An author fills one in (strings and arrays only need to live until the call) and

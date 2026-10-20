@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Uses the node type of examples/example_node.c from Python (docs/node_author_guide.md): loads its DLL, registers the type in a registry, and builds a
 graph and an engine over that registry.
 

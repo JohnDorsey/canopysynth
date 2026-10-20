@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Helpers shared by the C tests of the engine: guarded output buffers, small test node types, and a rig that builds a graph, an engine and
    an instance and checks at the end that every allocation was returned. */
 #ifndef SUPPORT_H

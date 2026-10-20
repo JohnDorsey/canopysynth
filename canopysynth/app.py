@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The stand-alone editor: `python -m canopysynth [graph.json] [--audio system|null]` (what run_editor.bat starts; plan step 14).
 
 A host program of its own and nothing more: a window with the editor in it, a real Engine over the same graph (so the preview node plays and the

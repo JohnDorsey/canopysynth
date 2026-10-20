@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Helpers for the graph-model tests: node types written in Python and registered in a real registry (so the descriptors the model reads are
 the DLL's own), a catalog of them with the built-in and the hidden test types, and a conversion of a Graph into the C graph description, to
 see whether the engine compiles what the model allows. (The real conversion, with the Engine class, is plan step 9.)"""

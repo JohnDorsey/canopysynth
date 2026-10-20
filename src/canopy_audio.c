@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The audio device layer (canopy_audio.h): miniaudio's device I/O, compiled here and nowhere else.
      What is compiled   Only device I/O and miniaudio's data conversion; decoding, encoding, the resource manager, the node graph and the engine
                         of miniaudio are switched off. Only two backends: WASAPI (the system's, on Windows) and miniaudio's null backend (a device

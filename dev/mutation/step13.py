@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of plan step 13's new tests, as FOCUSED campaigns (see mutate.py: ARGS and ENV): only the tests under examination judge each fault, so that
 what a campaign reports is what they catch on their own, not what the older tests would have caught first. Run with
     python dev/mutation/mutate.py dev/mutation/step13.py

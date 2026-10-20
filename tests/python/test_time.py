@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the time helpers (docs/canopy_design.md section 4 and the sample placement of section 5), checked against references that use
 Python's arbitrary-precision integers, which cannot overflow: the C code must agree with them everywhere inside int64, and report an error
 (never a wrong value) where the true result does not fit."""

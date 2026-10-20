@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: generation numbers and what a node that keeps history sees of them (design section 7): the upstream stamp, the boundary slot, shared
    resource and setting generations; and the hidden test filter, whose checkpoints must never be stale and must be used when they are not. */
 #include <math.h>

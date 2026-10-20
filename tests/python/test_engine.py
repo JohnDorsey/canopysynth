@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the engine seen from Python through ctypes, with node types written in Python (tests only: version 1 has no Python tier).
 These give the C engine independent references: Python big integers for where the samples of a span are, a plain recursive evaluation of
 whole random graphs, the list of exported functions in the headers, and a thread test of the knob table."""

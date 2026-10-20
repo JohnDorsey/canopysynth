@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Four mutations whose verdicts are known beforehand: a check of the mutation runner itself, in either of its modes (the fast one and --thorough), that it
 still reports a mutation that no test notices as SURVIVED (every other spec expects "caught" for everything, so none of them could show that). Run with
     python dev/mutation/mutate.py dev/mutation/known.py [--thorough]

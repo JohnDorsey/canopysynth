@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The realtime preview node (src/canopy_preview.c, plan step 7, design sections 9 and 11).
    Most tests run the audio callback's work directly (canopy_preview_fill: the same function the device's thread calls), against exact
    references; the rest open miniaudio's null backend, which takes the audio in real time and plays it nowhere, and pace themselves by the

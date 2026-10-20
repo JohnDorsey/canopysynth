@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Counted allocations with a failure hook for tests, and the pool (declared in canopy_internal.h; the two counters are exported). */
 #include <stdatomic.h>
 #include <stdlib.h>

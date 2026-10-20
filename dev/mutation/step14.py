@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations for plan step 14's Python code: the packaging script (dev/package.py) and the stand-alone editor (canopysynth/app.py). Run with
     python dev/mutation/mutate.py dev/mutation/step14.py
 They are all Python files, so the runner skips the build and the C tests, and AREAS limits the tests to the files written for them (test_package.py makes the packages

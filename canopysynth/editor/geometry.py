@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The editor's geometry, with no Tk in it (so it can be tested without a window): the view (zoom and pan), the layout of a node with its ports,
 knobs and widgets, hit testing, and the shapes of wires, knobs and rounded rectangles. Everything here is in world units unless a name says screen."""
 import math

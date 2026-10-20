@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Playback times as text, for the time field of the realtime preview node (design section 9: "shown as hh:mm:ss.mmm"). No Tk in here."""
 
 NS_PER_MS = 1_000_000

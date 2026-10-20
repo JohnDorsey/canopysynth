@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The graph model (design sections 14 and 15): nodes, connections, settings and knobs as plain Python data, and the saved form.
 
 A Graph knows nothing about the engine or the DLL: it is the thing the editor edits, the host stores (`to_dict()` / `Graph.from_dict(d)`)

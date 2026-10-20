@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The node types a graph may name, and the migrations that bring a graph saved under an older type version up to date.
 
 The types come from a registry of the DLL (the built-in ones, through `default_types()`) or from any registry a test or host made: a

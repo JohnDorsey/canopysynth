@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations for plan step 13's determinism tests (tests/c/test_determinism.c), as a FOCUSED campaign (see mutate.py: ARGS and ENV): only those tests judge each
 fault. Run with
     python dev/mutation/mutate.py dev/mutation/step13d.py

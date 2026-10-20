@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: the time helpers (docs/canopy_design.md section 4, and the sample placement of section 5). Hand-checked vectors; the heavy
    cross-checking against Python big integers is in tests/python/test_time.py. */
 #include <stdint.h>

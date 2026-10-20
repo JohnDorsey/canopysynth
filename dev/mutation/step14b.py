@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations for plan step 14's other files: run_editor.bat, the example node and the documents, as a FOCUSED campaign (see mutate.py: ARGS and ENV): only the tests of
 the packages and of the documents judge each fault (and the C tests are cut down to one cheap one, since the build still runs after a change to a C file). Run with
     python dev/mutation/mutate.py dev/mutation/step14b.py

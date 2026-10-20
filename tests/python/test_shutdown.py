@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests (plan step 13, error behaviours): how a process ends, and what it does when the machine runs out of memory for real.
 1. A program that exits while its preview is playing (the audio thread is running in the DLL), with an engine and instances still open, with a worker thread in the
    middle of queries, with an editor window that was never destroyed, through `os._exit`, or through an unhandled exception, must end by itself, quickly, with

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the boundary nodes through ctypes (what the Python bridge of plan step 9 will call): writing by name, reading a point or a span, the
 listing, the compile faults, and a writer thread against readers. The C tests (tests/c/test_boundary.c) check the details; here the exact
 floats are compared with an independent model, including a graph with a node in between."""

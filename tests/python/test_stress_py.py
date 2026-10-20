@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests (plan step 13): a short run of the Python-level multi-thread stress (tests/python/stress_threads.py: the real editor making random edits while threads
 write a boundary inlet, read what it feeds, replace the file node's file and ask the engine what it holds). `dev/stress.py` runs the same for as long as asked."""
 import stress_threads

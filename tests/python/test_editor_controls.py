@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: what the editor shows and does with a node's knobs, widgets and menus (plan step 11), in a real tkinter window placed far off the screen and
 driven with synthetic events, like test_editor.py (whose helpers it uses). The node types here are written by hand as descriptors (no DLL rig needed)
 next to the built-in ones, so that a node with every kind of setting and widget, and one with an internal sampling rate, can be tried."""

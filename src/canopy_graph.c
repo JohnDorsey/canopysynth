@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The graph description (canopy_engine.h): plain recorded data, checked only when it is compiled (canopy_engine.c). */
 #include <string.h>
 #include "canopy_core.h"

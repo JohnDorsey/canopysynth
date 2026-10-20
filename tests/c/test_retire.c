@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: what a node needs when other threads are around: retiring data it has replaced (canopy_ctx_retire: freed only when no query that began
    before can still be reading it) and the message a node keeps about itself (canopy_ctx_set_message, canopy_engine_node_message). */
 #include <stdlib.h>

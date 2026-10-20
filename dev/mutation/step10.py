@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of plan step 10 (the node editor: its geometry, the Tk widget, and Graph.can_connect): run with
     python dev/mutation/mutate.py dev/mutation/step10.py
 Every one of them should be reported as caught; see mutate.py. (A name starting G is canopysynth/editor/geometry.py, V canopysynth/editor/canvas.py,

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: the node-type descriptor and the registry (docs/canopy_design.md section 12). */
 #include <math.h>
 #include <stdio.h>

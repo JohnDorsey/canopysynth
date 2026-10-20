@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The engine: compiling a graph description into an immutable compiled graph, installing it, and the things that outlive one compiled graph
    (the knob slots and the shared resources, kept per node ID). Instances and queries are in canopy_instance.c. */
 #include <math.h>

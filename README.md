@@ -54,6 +54,7 @@ with canopysynth.Engine(graph) as engine:
 |---|---|
 | `run_editor.bat` | starts the editor |
 | `canopysynth/` | the Python package, with `canopysynth.dll` (the engine), `include/` (the C headers) and `lib/` (the import library) |
+| `LICENSE` | the GNU General Public License, version 3 |
 | `docs/` | the guides, the design, third-party notices |
 | `examples/` | the section 15 program, a node written in C and the Python that uses it |
 
@@ -68,5 +69,12 @@ python run_tests.py                    build and run every test
 python dev/package.py                  write dist/canopysynth-1.0.0-py3-none-win_amd64.whl and dist/canopysynth-1.0.0-windows-x64.zip
 ```
 
-`CLAUDE.md` lists every command; `docs/canopy_plan.md` is the build plan and its log. No licence has been chosen for CANOPY itself yet. The two third-party
-libraries inside the DLL (dr_wav and miniaudio) are public domain / MIT-0 (`docs/THIRD_PARTY_NOTICES.txt`).
+`CLAUDE.md` lists every command; `docs/canopy_plan.md` is the build plan and its log.
+
+## Licence
+
+CANOPY is free software under the **GNU General Public License, version 3 or (at your option) any later version** (SPDX: `GPL-3.0-or-later`); the full text is
+in `LICENSE`, and every source file names it in its first line. The two third-party libraries inside the DLL (dr_wav and miniaudio) are public domain / MIT-0
+and compatible with it (`docs/THIRD_PARTY_NOTICES.txt`). A program that imports `canopysynth`, or a node type that is built against its headers and loaded into
+the engine, is in the FSF's view a combined work with it, so if you distribute such a program or node, the GPL applies to it too (this is a description of the
+licence's intent, not legal advice).

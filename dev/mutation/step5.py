@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of plan step 5 (the boundary nodes and the host calls by name): run with
     python dev/mutation/mutate.py dev/mutation/step5.py
 Every one of them should be reported as caught; see mutate.py. (A name starting B is canopy_boundary.c, C the boundary parts of canopy_engine.c,

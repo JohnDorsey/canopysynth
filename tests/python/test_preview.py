@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the realtime preview node through ctypes, as the editor of plan step 12 and a host will call it: the list of audio devices, Play and
 Pause as actions, the playback time, the warning, the node's message, all on miniaudio's null backend (no sound hardware needed). The C tests
 (tests/c/test_preview.c) check the mixing and the timing against exact references; here the calls cross the DLL's boundary, and a node written

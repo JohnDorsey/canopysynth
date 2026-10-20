@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of plan step 9 (the Python bridge: Engine, Instance, the native bindings, QueryError, and the C point read with a status): run with
     python dev/mutation/mutate.py dev/mutation/step9.py
 Every one of them should be reported as caught; see mutate.py. (A name starting E is canopysynth/engine.py, N _native.py, X errors.py,

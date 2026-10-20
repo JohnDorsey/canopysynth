@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: the scratch arena (docs/canopy_design.md sections 8 and 12): its size from the declared counts along the deepest chain, and
    canopy_scratch() with its rules (up to 65536 floats, no more buffers than declared, released when the handler returns). */
 #include <stdint.h>

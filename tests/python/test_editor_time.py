@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the playback time as text (design section 9: hh:mm:ss.mmm), no Tk in them. Expected texts are written out by hand; the round trip is checked
 against an independent computation with divmod on random times."""
 import random

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Builds the DLL, then runs every C test and every Python test, and prints one total.
 
     python run_tests.py                 build + all tests

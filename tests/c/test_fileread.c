@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: the FileReadNode's life with other threads and with a failing allocator: replacing the file while three threads read it, running out of
    memory while loading, the stamp downstream, and that a query allocates nothing. (Which values it answers, for every file format, is checked
    against an independent model in tests/python/test_fileread.py.) */

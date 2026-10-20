@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of plan step 8 (the Python graph model, the node-type catalog with migrations, the value checks, and the absolute-path rule of
 the file node): run with
     python dev/mutation/mutate.py dev/mutation/step8.py

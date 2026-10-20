@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: the counted allocations with their failure hook, the pool, and the span plan (internal pieces the engine is built on). */
 #include <string.h>
 #include "../../src/canopy_internal.h"

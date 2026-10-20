@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Determinism (plan step 13; design section 5: while the graph, the knob positions, the boundary values, the settings and the files stay the same, a query
    with the same arguments returns identical floats every time; design section 12: "recorded-output tests made possible by the determinism rule").
    Recorded outputs: twelve whole graphs, each asked a fixed list of queries (spans of every shape, forward and reversed, before and after t = 0, with all n

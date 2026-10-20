@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Loading the DLL, and refusing to run against one that does not match this Python package."""
 import ctypes
 import os

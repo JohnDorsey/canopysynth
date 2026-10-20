@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The Engine and Instance classes (design sections 8, 10, 15 and 16): the bridge between a Graph and the C engine.
 
     engine = canopysynth.Engine(graph)      # compiles the graph and installs it; GraphError (with the engine's reason) if it cannot

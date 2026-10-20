@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Checks of the plain values a graph holds: settings, knob positions, canvas positions. Every function returns the value to store or raises
 GraphError naming `where` (for example "node 3 (file_read)"). What is stored is always JSON-safe (int, float, str), so that to_dict() can be
 written to a file as it is, and always something the engine accepts when it compiles the graph (the checks mirror those of

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* canopysynth - graphs, the engine and instances (docs/canopy_design.md sections 5 to 8, 10 and 16).
 
    The life of a graph:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Try the editor with a real Engine and your real sound device (plan step 12; the author's check of "editing during playback").
 
     python dev/editor_try.py                       opens the editor on a small graph: two file nodes (A and B) and a realtime preview node, A's two

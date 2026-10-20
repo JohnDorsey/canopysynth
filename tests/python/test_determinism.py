@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests (plan step 13): determinism through the public Python API (design section 5: the same graph, knobs, boundary values, settings and files give the same
 floats every time). The recorded outputs themselves are in tests/c/test_determinism.c, a table of hashes that the three C test programs check; this file asks the
 Python API the same questions of the same data and compares what it answers with the hash in that table, so the bridge (ctypes, the memoryview of a span, the

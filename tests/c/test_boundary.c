@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: the boundary nodes and the host calls that use them (design section 10): writing a boundary inlet by name, reading through a boundary
    outlet by name, unique non-empty names, listing, and what a value belongs to. */
 #include <math.h>

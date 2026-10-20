@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """A minimal ctypes view of the DLL for the tests of the C functions (the real Python bridge is built at plan step 9)."""
 import ctypes
 import os

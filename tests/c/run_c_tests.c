@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Runs every C test. Output: one "  PASS  name" / "  FAIL  name" line per test, then "N passed, M failed". Exit code 1 if any failed.
    Built twice by build.ps1: normally (run_c_tests.exe) and, with CANOPY_DEBUG_HEAP, against the MSVC debug runtime (run_c_tests_debug.exe):
    there every heap operation validates the whole heap, ctest_heap_ok() can be asked at any time, and leaked blocks are reported at the end. */

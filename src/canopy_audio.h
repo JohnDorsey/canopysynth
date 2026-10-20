@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The audio device layer (not exported): the only code that talks to miniaudio. It opens a stereo float32 playback device at 48000 Hz that
    calls `fill` in its own thread whenever it needs audio, and lists the devices by name. The realtime preview node (canopy_preview.c) is its
    only user. Everything that miniaudio allocates goes through canopy_alloc. miniaudio says that creating and destroying contexts and devices

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The stand-alone stress program (plan step 13): stress_run of tests/c/test_stress.c for as long as asked, with the figures printed at the end.
      stress.exe [seconds] [--seed N] [--readers N] [--no-preview] [--quiet]
    Built by `build.ps1 -Stress` in three flavours, like the C tests: build\stress.exe (optimised), build\stress_debug.exe (the MSVC debug runtime: the heap is

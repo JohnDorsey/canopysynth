@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* A tiny C test harness. A test is `static void test_name(void)`; CHECK(cond) records a failure (and keeps going).
    List tests in a file's `void register_<file>(void)` with RUN(test_name); main() in run_c_tests.c calls every register function. */
 #ifndef CTEST_H

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests: the Python bridge (plan step 9, design sections 15 and 16): the section 15 snippet as written, against the model of a generated WAV file;
 compile faults and updates; the boundary list and writes; every error of a query; instances in several threads; and the lifetime of engines
 and instances (nothing leaks, in any order of closing or dropping)."""

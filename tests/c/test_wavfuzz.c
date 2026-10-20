@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: broken and hostile WAV files (plan step 13). The file node reads a file with dr_wav, which the library does not control, so what a file
    node does with damaged input is checked by throwing a lot of it at it: 11 valid files (PCM at 8, 16, 24 and 32 bits, 32-bit float, mono, stereo,
    three and six channels, and the extensible layout) are each damaged many times in one of 12 ways (flipped header bytes, header fields set to the edges of

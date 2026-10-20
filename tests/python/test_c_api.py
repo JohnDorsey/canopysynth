@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests (plan step 13, error behaviours): the C API as a whole, as the DLL exports it.
 1. The export table of the DLL (read from the PE file) is the list of functions the three public headers declare, both ways, and every ctypes declaration
    made in Python (the package's own, canopysynth/_native.py, and the tests', engine_dll.py) has the argument and result widths of the header's prototype: a

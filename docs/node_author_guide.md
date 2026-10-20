@@ -207,5 +207,7 @@ exists: its connections are dropped). A file saved under version 1 of a type now
 - **Stack.** Each node that asks upstream adds a nested call: keep your frames small, and do not put large arrays on the stack (use `canopy_scratch`).
 - **Threads.** Queries of one instance never overlap, queries of different instances do: the shared resource must be safe for concurrent reads, and the instance state needs no lock.
 - **Realtime safe** only if it is true: no allocation, no locks, no I/O, no Python in the query handlers.
+- **Licence.** CANOPY and its headers are GPL-3.0-or-later (`LICENSE`), and so are `examples/example_node.c` and the other examples: code you copy from them is GPL code. A node
+  type that you build against the headers and load into the engine is, in the FSF's view, a combined work with it: distribute it only under terms the GPL allows.
 - **Test it.** `tests/c/test_overrun.c` and `tests/c/support.c` in the source repository show how the engine's own tests put canary bytes round the output buffer and ask a node at every
   count and time shape; the same ideas work for yours.

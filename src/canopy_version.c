@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "canopy.h"
 
 int32_t canopy_build_number(void)

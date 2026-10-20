@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests (plan step 13, error behaviours): the public Python API (Graph, Node, Port, Engine, Instance and the helpers) called with garbage as well as with
 good arguments, in random order, against a live engine with its audio on the null backend. The rule it checks (design sections 14 to 16: faults are GraphError,
 BoundaryError and QueryError with a sentence that names the fault): a call either does what it says or raises one of the documented exceptions, never any

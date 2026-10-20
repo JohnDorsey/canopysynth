@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The public helper functions: nanoseconds to sample frames.
 
 Times inside canopysynth are signed 64-bit integers counting nanoseconds since t = 0, and there is no global sample rate. These two

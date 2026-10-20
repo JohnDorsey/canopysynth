@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Tests: compile-and-swap (design section 8): an instance adopts a newly installed graph at the start of its next query, state is carried
    over by node ID, nothing is allocated or freed by a query, and what is no longer used is freed by the editing thread. */
 #include <stdlib.h>

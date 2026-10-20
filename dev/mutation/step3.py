@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations of plan step 3 (graph, engine, instance, queries, scratch arena, allocation): run with
     python dev/mutation/mutate.py dev/mutation/step3.py
 Every one of them should be reported as caught; see mutate.py. (A name starting I is canopy_instance.c, E canopy_engine.c, T canopy_time.c,

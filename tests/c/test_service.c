@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The engine's own instances for nodes that run a thread of their own (CANOPY_FLAG_SERVICE, plan step 7): who may make one and when, how it is
    counted, how installs keep it up to date, and the order in which the engine lets go of it. The realtime preview node is the real user
    (test_preview.c); here a node type of the tests stands in for it. */

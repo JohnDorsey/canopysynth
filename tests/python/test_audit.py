@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests added by the final audit of plan step 15: statements of the design that the audit found true but not asserted by any test. Each says which statement.
 Design 9: after the end of the audio the preview keeps playing silence until paused. Design 15: `Editor` is a tk.Frame that packs beside the host's own controls.
 Design 16: an editor whose engine cannot compile what it was given (a GraphError, not only a BoundaryError) shows the reason and keeps the previous graph running."""

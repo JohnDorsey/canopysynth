@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Declarations shared inside the DLL (and with the C tests), not exported. */
 #ifndef CANOPY_INTERNAL_H
 #define CANOPY_INTERNAL_H

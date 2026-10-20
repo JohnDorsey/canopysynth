@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The mutations for plan step 13's sweep of the C API (tests/python/test_c_api.py), as a FOCUSED campaign (see mutate.py: ARGS and ENV): only that test (and the C test of
 registry_at, which the sweep led to: an index one past the end reads past the entries, which only the AddressSanitizer run of the C tests sees) judges each fault. Run with
     python dev/mutation/mutate.py dev/mutation/step13f.py
