@@ -467,6 +467,36 @@ def test_py_closing_the_engine_with_an_open_instance_is_refused_and_everything_c
     refuses(engine.new_instance, RuntimeError, "closed")
 
 
+def test_py_when_the_python_instance_object_cannot_be_built_new_instance_is_a_memory_error_and_leaves_no_instance_behind():
+    """Found by the real out-of-memory test (test_shutdown.py), which failed one run in five: `new_instance` made the instance in C, counted it, and only then built the Python
+    object, so a MemoryError there lost the pointer for good (the engine then refused to close, "1 open instance"). Memory that has really run out cannot be had in a
+    test that has to be exact, so the failure is put in at the place where it matters: the object cannot be built."""
+    from canopysynth import engine as engine_module
+    base = e.alloc_live()
+    engine = Engine(pair_graph())
+    real = engine_module.Instance
+
+    class Unbuildable:
+        def __init__(self, *arguments):
+            raise MemoryError("the Instance object could not be built")
+
+    engine_module.Instance = Unbuildable
+    try:
+        refuses(engine.new_instance, MemoryError, "could not be built")
+    finally:
+        engine_module.Instance = real
+    engine.close()                                                       # no instance is open (nothing was left in C): this must not be refused
+    assert e.alloc_live() == base
+    engine = Engine(pair_graph())                                        # and the ordinary path still counts, answers and frees
+    inst = engine.new_instance()
+    engine.set_boundary("x", 0.25)
+    assert inst.value("y", 0) == 0.25
+    refuses(engine.close, RuntimeError, "1 open instance")
+    inst.close()
+    engine.close()
+    assert e.alloc_live() == base
+
+
 def test_py_an_instance_keeps_its_engine_alive_and_dropping_things_without_closing_frees_them_all():
     base = e.alloc_live()
     engine = Engine(pair_graph())

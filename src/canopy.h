@@ -13,7 +13,7 @@
 
 /* The delivery counter: bumped by exactly 1 once per finished prompt that changed code. The Python package has the same number
    (canopysynth/version.py); a test checks that the two agree, and the Python code refuses to run against a DLL that disagrees. */
-#define CANOPYSYNTH_BUILD 22
+#define CANOPYSYNTH_BUILD 23
 
 CANOPY_API int32_t canopy_build_number(void);
 

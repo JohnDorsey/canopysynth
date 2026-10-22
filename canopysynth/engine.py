@@ -297,11 +297,17 @@ class Engine:
         """An Instance over the installed graph, for the thread that will query it (one instance per querying thread)."""
         with self._lock:
             handle = self._handle()
+            # Everything Python has to allocate is made BEFORE the C call, so that when memory has really run out the failure comes while there is nothing in C to lose;
+            # after the call only stores into slots that already exist are left, and those allocate nothing. (One step is still out of reach: ctypes turns the pointer the
+            # call returns into a Python int, and that can fail after the instance exists. Measured at one run in 300 of the real out-of-memory test.)
+            instance = Instance(self, None)
+            count = self._instances + 1
             pointer = self._lib.canopy_engine_new_instance(handle)
             if not pointer:
                 raise MemoryError("the engine could not make an instance")
-            self._instances += 1
-        return Instance(self, pointer)
+            self._instances = count
+            instance._pointer = pointer
+        return instance
 
     def _instance_closed(self):
         with self._lock:
