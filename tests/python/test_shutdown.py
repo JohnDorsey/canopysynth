@@ -286,7 +286,11 @@ print("leaked blocks:", e.alloc_live() - baseline)
 def test_py_when_memory_runs_out_for_real_an_instance_that_cannot_be_made_is_a_memory_error_and_the_instances_that_were_made_free_cleanly():
     """The limit is set 6 MB above what the process holds, and instances of a two-node graph (a few hundred bytes each: it has no scratch buffer) are made until
     one cannot be: a MemoryError, the engine goes on, and every instance frees without a leak. (Freeing an instance costs a pass over the live ones, so the loop is
-    short: with the memory of the whole machine it would make a million.)"""
+    short: with the memory of the whole machine it would make a million.)
+    This test failed one run in five until it was investigated (2026-10-22), for two reasons. The test itself reported the MemoryError with `print` while the process was
+    still at its limit, with no memory left to format the line in: it now holds a reserve and gives it back in the handler, as a program that means to survive running out
+    of memory has to. And `Engine.new_instance` could lose an instance made in C when Python could not build its object (fixed in the library; the regression test is in
+    test_bridge.py); a list that grows by `append` could also fail after an instance was made, so the list is made whole before the limit and filled by index."""
     body = JOB + PRIVATE + """
 import engine_dll as e
 baseline = e.alloc_live()
@@ -297,16 +301,20 @@ graph.connect(x.outlet("out"), y.inlet("in"))
 engine = Engine(graph)
 engine.set_boundary("x", 0.5)
 inst = engine.new_instance()
+LIMIT = 400_000
+instances, error = [None] * LIMIT, None
+reserve = bytearray(2 * 1024 * 1024)
 limit_memory(int(private_mb()) + 6)
-instances, error = [], None
 try:
-    while len(instances) < 400_000:
-        instances.append(engine.new_instance())
+    for n in range(LIMIT):
+        instances[n] = engine.new_instance()
 except MemoryError:
+    del reserve
     error = "MemoryError"
-print("instances:", error, len(instances) > 1000, len(instances) < 400_000)
+made = [each for each in instances if each is not None]
+print("instances:", error, len(made) > 1000, len(made) < LIMIT)
 print("the engine still answers:", inst.value("y", 0))
-for each in instances:
+for each in made:
     each.close()
 instances.clear()
 inst.close()
