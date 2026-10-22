@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Continuous integration, stage 1 of docs/portability_inventory.md: Windows only, MSVC (the one supported setup).
+#   full             the whole suite as `python run_tests.py` runs it on the author's machine: the DLL and the C test programs are built, the C tests run
+#                    three times (normal, debug heap, AddressSanitizer) and the Python tests once; then the wheel and the zip are made from that build and
+#                    kept as files of the run
+#   python-versions  the C tests once and the Python tests, on the other Python versions the wheel claims to support (`Requires-Python`, dev/package.py);
+#                    tests/python/test_ci.py fails if the oldest of them is not in this list
+# The tests use the null audio backend, so no sound device is needed. Nothing here has run yet: the first run on the author's repository is the first test of it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Tool versions
+        run: |
+          python --version
+          Get-Command cl -ErrorAction SilentlyContinue
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationVersion
+      - name: Build and run the whole suite
+        run: python run_tests.py
+      - name: Which test programs were built (the AddressSanitizer one is skipped quietly where the component is missing)
+        if: always()
+        run: Get-ChildItem build -Filter *.exe | Select-Object Name, Length
+      - name: Make the wheel and the unzip-and-run folder
+        run: python dev/package.py --no-build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canopysynth-windows-packages
+          path: |
+            dist/*.whl
+            dist/*.zip
+          if-no-files-found: error
+
+  python-versions:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build, then the C tests once and the Python tests
+        run: python run_tests.py --no-debug --no-asan

@@ -152,4 +152,6 @@ python dev/editor_check.py                            # the real-window check of
 - The shell tool mangles backslashes in heredocs: edit files with the Edit/Write tools or run a script file, not an inline `python - <<EOF`.
 - Line endings: CRLF for all source and text files (Windows); the Write tool makes LF files, so convert new ones (a script that rewrites `\r\n`).
 - Batch files: CRLF (labels and `goto` fail with LF), and `%errorlevel%` inside a parenthesised block is the value from before the block (found at step 14: use a label and `goto` instead).
-- No git for now.
+- Git: the project is a git repository (`main`, committer identity set in the repository's own config); commit or push only when the author asks.
+- CI: `.github/workflows/ci.yml` (Windows, MSVC: the whole suite, the packages kept as files of the run, and the other Python versions the wheel claims) is checked by `tests/python/test_ci.py`
+  (text only) and `dev/mutation/step17.py`; it has not been run on a real runner yet. `docs/portability_inventory.md` lists everything that is Windows- or MSVC-specific, for a port.
