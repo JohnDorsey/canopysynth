@@ -377,6 +377,16 @@ def sweep_preview(world):
 def sweep_instance(world):
     inst, eng = world.instance, world.engine
     check(not call(lib.canopy_engine_new_instance, None), 'not call(lib.canopy_engine_new_instance, None)')
+    slot = vp(0x1234)                                                                          # not NULL and not an instance: the call must overwrite it
+    allowed(call(lib.canopy_engine_new_instance_into, None, ctypes.byref(slot)), ERR_ARGUMENT)
+    check(slot.value is None, 'a NULL engine leaves the slot NULL')
+    allowed(call(lib.canopy_engine_new_instance_into, eng, None), ERR_ARGUMENT)
+    allowed(call(lib.canopy_engine_new_instance_into, None, None), ERR_ARGUMENT)
+    slot.value = 0x1234
+    allowed(call(lib.canopy_engine_new_instance_into, eng, ctypes.byref(slot)), OK)
+    check(slot.value not in (None, 0x1234, inst), 'a second instance, in the slot')
+    check(call(lib.canopy_instance_graph_serial, slot) == e.engine_graph_serial(eng), 'the instance in the slot runs the installed graph')
+    call(lib.canopy_instance_free, slot)
     call(lib.canopy_instance_free, None)
     check(call(lib.canopy_instance_arena_floats, None) == 0 and call(lib.canopy_instance_graph_serial, None) == 0, 'call(lib.canopy_instance_arena_floats, None) == 0 and call(lib.canopy_instance_graph_serial, None) == 0')
     check(call(lib.canopy_instance_graph_serial, inst) == e.engine_graph_serial(eng), 'call(lib.canopy_instance_graph_serial, inst) == e.engine_graph_serial(eng)')

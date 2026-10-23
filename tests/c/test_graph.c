@@ -644,6 +644,62 @@ static void test_c_the_engine_cannot_be_freed_while_an_instance_exists(void)
     CHECK_INT(life_setup_failures, 0);
 }
 
+/* canopy_engine_new_instance_into: the same instance as canopy_engine_new_instance, but through a slot the caller made beforehand. A binding that gets the pointer back
+   as the function's result must allocate to turn it into its own number, and when that fails after the instance exists, the instance is lost (found by the real
+   out-of-memory test of test_shutdown.py). Always writes the slot, so a caller never reads a stale value. */
+static void test_c_new_instance_into_reports_a_status_and_always_writes_the_slot(void)
+{
+    Rig rig;
+    CanopyInstance *made = (CanopyInstance *)(uintptr_t)1;                    /* not NULL and not an instance: the call must overwrite it */
+    rig_open(&rig);
+    rig_node(&rig, 1, "test.const");
+    CHECK_INT(canopy_engine_new_instance_into(rig.engine, &made), CANOPY_ERR_ARGUMENT);   /* no graph is installed yet */
+    CHECK(made == NULL);
+    rig_install(&rig);
+    CHECK_INT(canopy_engine_new_instance_into(rig.engine, NULL), CANOPY_ERR_ARGUMENT);
+    made = (CanopyInstance *)(uintptr_t)1;
+    CHECK_INT(canopy_engine_new_instance_into(NULL, &made), CANOPY_ERR_ARGUMENT);
+    CHECK(made == NULL);
+    CHECK_INT(canopy_engine_new_instance_into(rig.engine, &made), CANOPY_OK);
+    CHECK(made != NULL && made != rig.instance);                              /* a second instance of its own... */
+    CHECK(canopy_instance_graph_serial(made) == canopy_engine_graph_serial(rig.engine));      /* ...over the installed graph */
+    CHECK_INT(canopy_engine_free(rig.engine), CANOPY_ERR_BUSY);               /* the engine counts it */
+    canopy_instance_free(made);
+    rig_close(&rig);                                                          /* and with it gone only the rig's own instance is left, which rig_close frees */
+}
+
+static void test_c_new_instance_into_fails_with_out_of_memory_at_every_allocation_and_leaks_nothing(void)
+{
+    Rig rig;
+    int64_t live, fail_at;
+    int failures = 0, successes = 0;
+    rig_open(&rig);
+    rig_node(&rig, 1, "test.const");
+    rig_install(&rig);
+    live = canopy_alloc_live();
+    for (fail_at = 0; fail_at < 200 && successes < 3; fail_at++) {
+        CanopyInstance *made = (CanopyInstance *)(uintptr_t)1;
+        int32_t status;
+        canopy_alloc_fail_after(fail_at);
+        status = canopy_engine_new_instance_into(rig.engine, &made);
+        canopy_alloc_fail_after(-1);
+        if (status == CANOPY_OK) {
+            CHECK(made != NULL);
+            canopy_instance_free(made);
+            successes++;
+        } else {
+            CHECK_INT(status, CANOPY_ERR_MEMORY);
+            CHECK(made == NULL);                                              /* a failure still writes the slot */
+            failures++;
+        }
+        CHECK_INT(canopy_alloc_live(), live);                                 /* nothing is left over, whichever way it went */
+    }
+    CHECK(failures >= 3);                                                     /* the instance, its first package and its node states: at least three places to fail */
+    CHECK_INT(successes, 3);                                                  /* and the sweep ended when the call no longer reached a failure */
+    CHECK_HEAP();
+    rig_close(&rig);
+}
+
 static void test_c_actions_reach_the_node_types_on_action_handler(void)
 {
     Rig rig;
@@ -832,6 +888,8 @@ void register_test_graph(void)
     RUN(test_c_shared_resources_are_made_once_per_node_and_instance_state_once_per_instance);
     RUN(test_c_installing_the_same_graph_again_keeps_each_nodes_shared_resource_and_a_new_node_gets_one);
     RUN(test_c_the_engine_cannot_be_freed_while_an_instance_exists);
+    RUN(test_c_new_instance_into_reports_a_status_and_always_writes_the_slot);
+    RUN(test_c_new_instance_into_fails_with_out_of_memory_at_every_allocation_and_leaks_nothing);
     RUN(test_c_actions_reach_the_node_types_on_action_handler);
     RUN(test_c_an_instance_made_before_another_graph_was_installed_adopts_it_when_a_node_changes_type_and_the_old_node_goes_when_unused);
     RUN(test_c_the_functions_refuse_null_arguments_without_crashing);

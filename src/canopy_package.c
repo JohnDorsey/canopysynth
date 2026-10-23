@@ -268,13 +268,27 @@ static void instance_remove_locked(CanopyEngine *engine, CanopyInstance *instanc
     instance_teardown(instance);
 }
 
+int32_t canopy_engine_new_instance_into(CanopyEngine *engine, CanopyInstance **out)
+{
+    int32_t status;
+    if (!out) return CANOPY_ERR_ARGUMENT;
+    *out = NULL;                                         /* written whatever happens: a caller never reads a stale value */
+    if (!engine) return CANOPY_ERR_ARGUMENT;
+    canopy_lock_exclusive(&engine->lock);
+    if (!atomic_load_explicit(&engine->current, memory_order_acquire)) {
+        status = CANOPY_ERR_ARGUMENT;                    /* a call that is not allowed yet: no graph is installed */
+    } else {
+        *out = instance_make_locked(engine, 0);
+        status = *out ? CANOPY_OK : CANOPY_ERR_MEMORY;
+    }
+    canopy_unlock_exclusive(&engine->lock);
+    return status;
+}
+
 CanopyInstance *canopy_engine_new_instance(CanopyEngine *engine)
 {
-    CanopyInstance *instance;
-    if (!engine) return NULL;
-    canopy_lock_exclusive(&engine->lock);
-    instance = instance_make_locked(engine, 0);
-    canopy_unlock_exclusive(&engine->lock);
+    CanopyInstance *instance = NULL;
+    canopy_engine_new_instance_into(engine, &instance);  /* one path: a failure of either kind is a NULL */
     return instance;
 }
 

@@ -298,15 +298,20 @@ class Engine:
         with self._lock:
             handle = self._handle()
             # Everything Python has to allocate is made BEFORE the C call, so that when memory has really run out the failure comes while there is nothing in C to lose;
-            # after the call only stores into slots that already exist are left, and those allocate nothing. (One step is still out of reach: ctypes turns the pointer the
-            # call returns into a Python int, and that can fail after the instance exists. Measured at one run in 300 of the real out-of-memory test.)
+            # after the call only stores into slots that already exist are left, and those allocate nothing. That includes the pointer: a function that RETURNS it makes
+            # ctypes build a Python int, which can fail after the instance exists and lose it (it did, in about one run in sixty of the real out-of-memory test), so
+            # the C function writes it into a slot made here, and the slot itself is kept as the instance's handle (ctypes takes it wherever a pointer goes).
             instance = Instance(self, None)
             count = self._instances + 1
-            pointer = self._lib.canopy_engine_new_instance(handle)
-            if not pointer:
+            slot = ctypes.c_void_p()
+            reference = ctypes.byref(slot)
+            status = self._lib.canopy_engine_new_instance_into(handle, reference)
+            if status == native.ERR_MEMORY:
                 raise MemoryError("the engine could not make an instance")
+            if status != native.OK:
+                raise RuntimeError(native.message(status))
             self._instances = count
-            instance._pointer = pointer
+            instance._pointer = slot
         return instance
 
     def _instance_closed(self):

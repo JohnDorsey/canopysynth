@@ -47,6 +47,7 @@ _SIGNATURES = [
     ("canopy_preview_set_time", _i32, [_vp, _i64, _i64]),
     ("canopy_preview_warning", _i32, [_vp, _i64, ctypes.c_char_p, _i32, _p_i32]),
     ("canopy_engine_new_instance", _vp, [_vp]),
+    ("canopy_engine_new_instance_into", _i32, [_vp, _vp]),             # (the second argument is a byref of a ctypes c_void_p: the slot the instance is written into)
     ("canopy_instance_free", None, [_vp]),
     ("canopy_instance_read_at", _i32, [_vp, _str, _i64, _p_float]),
     ("canopy_instance_read_span", _i32, [_vp, _str, _i64, _i64, _i64, _p_float]),

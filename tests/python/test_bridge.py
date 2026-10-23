@@ -497,6 +497,37 @@ def test_py_when_the_python_instance_object_cannot_be_built_new_instance_is_a_me
     assert e.alloc_live() == base
 
 
+def test_py_new_instance_takes_the_instance_from_a_slot_made_before_the_call_and_never_turns_the_pointer_into_a_number():
+    """The last way left to lose an instance was ctypes turning the pointer that `canopy_engine_new_instance` returns into a Python int: a small allocation, and when it
+    failed the instance was alive in C with nobody to free it (the real out-of-memory test, one run in fifty or so). The engine now calls `canopy_engine_new_instance_into`
+    with a ctypes slot (and its `byref`) made BEFORE the call, and keeps the slot itself as the instance's handle: no number is made after the call. The slot is
+    written here the way the C function writes it, and what the engine does with it is followed to the call that frees the instance."""
+    base = e.alloc_live()
+    with Engine(pair_graph()) as engine:
+        real = engine._lib
+        calls, freed = [], []
+
+        def into(handle, reference):
+            calls.append((handle, reference))
+            reference._obj.value = 0x1234                                # what canopy_engine_new_instance_into does with its out parameter
+            return 0
+
+        engine._lib = Faulty(real, canopy_engine_new_instance_into=into, canopy_instance_free=freed.append)
+        inst = engine.new_instance()
+        assert len(calls) == 1 and calls[0][0] == engine._handle()
+        assert isinstance(inst._pointer, ctypes.c_void_p) and inst._pointer.value == 0x1234, inst._pointer     # the slot, not a number
+        refuses(engine.close, RuntimeError, "1 open instance")           # it is counted
+        inst.close()
+        assert len(freed) == 1 and freed[0] is calls[0][1]._obj, freed      # the very slot the C function wrote is what frees the instance
+        inst.close()                                                     # twice is fine
+        assert len(freed) == 1
+        for status, kind in ((e.ERR_MEMORY, MemoryError), (e.ERR_ARGUMENT, RuntimeError)):
+            engine._lib = Faulty(real, canopy_engine_new_instance_into=lambda *a, status=status: status)
+            refuses(engine.new_instance, kind)
+        engine._lib = real                                               # neither failure was counted: the engine closes with nothing open
+    assert e.alloc_live() == base
+
+
 def test_py_an_instance_keeps_its_engine_alive_and_dropping_things_without_closing_frees_them_all():
     base = e.alloc_live()
     engine = Engine(pair_graph())
@@ -582,7 +613,7 @@ def test_py_memory_running_out_in_the_engine_is_a_memory_error_and_nothing_is_le
             refuses(engine.update, MemoryError, "out of memory")
             engine._lib = real
             engine.update()                                              # and the engine is as it was: the next update works
-        engine._lib = Faulty(real, canopy_engine_new_instance=lambda *a: None)
+        engine._lib = Faulty(real, canopy_engine_new_instance_into=lambda *a: e.ERR_MEMORY)
         refuses(engine.new_instance, MemoryError, "instance")
         engine._lib = real
         with engine.new_instance() as inst:                              # (the failed one did not count: the engine can still be closed after this)

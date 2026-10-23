@@ -178,6 +178,11 @@ typedef struct CanopyInstance CanopyInstance;
    graph is installed or memory ran out. The engine keeps a list of live instances (for the preparing described at the top); the instance
    leaves it when freed. */
 CANOPY_API CanopyInstance *canopy_engine_new_instance(CanopyEngine *engine);
+/* The same, reporting a status and writing the instance into *out, a slot that the caller made beforehand. *out is ALWAYS written: the new instance, or NULL on any
+   failure. CANOPY_OK; CANOPY_ERR_ARGUMENT for a NULL engine or a NULL out, or when no graph is installed; CANOPY_ERR_MEMORY when memory ran out (nothing is left
+   over). Prefer this one from a binding that has to make an object of its own to hold the pointer (Python's ctypes makes an int from a returned pointer, and when
+   that allocation fails after the instance exists, the instance is lost); make the object first, and let this call fill it. */
+CANOPY_API int32_t canopy_engine_new_instance_into(CanopyEngine *engine, CanopyInstance **out);
 CANOPY_API void canopy_instance_free(CanopyInstance *instance);
 
 /* For tests and diagnostics: the number of floats in the instance's scratch arena, and the serial number of the graph it runs now (an

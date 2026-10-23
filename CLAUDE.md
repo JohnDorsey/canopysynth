@@ -93,7 +93,7 @@ python dev/editor_check.py                            # the real-window check of
   - `tests/python/` plain `test_*` functions; `engine_dll.py` has the ctypes bindings and a way to write node types in Python (tests only); step 13 added
     `test_determinism.py` (the public API against the hash the C table records), `test_api_fuzz.py` (garbage arguments to every public call, and saved graphs damaged in
     random places: only the documented exceptions), `test_c_api.py` (the DLL's export table against the headers and against every ctypes declaration, and every one of the
-    63 exported functions called with NULL and extreme arguments), `test_shutdown.py` (a process that ends while the preview plays; memory that runs out for real, with a
+    64 exported functions called with NULL and extreme arguments), `test_shutdown.py` (a process that ends while the preview plays; memory that runs out for real, with a
     job object), `stress_threads.py` + `test_stress_py.py` (the Python-level stress) and `fixtures`-free recordings: the only recorded outputs are in the C table;
     `graph_dll.py` builds a catalog of Python, built-in and hidden test types and converts a `Graph` into the C description to compile it in a real
     engine; `fixtures/graph_v1.json` is the hand-written version 1 file the saved format is pinned by (a format change must keep it loading);
@@ -153,5 +153,9 @@ python dev/editor_check.py                            # the real-window check of
 - Line endings: CRLF for all source and text files (Windows); the Write tool makes LF files, so convert new ones (a script that rewrites `\r\n`).
 - Batch files: CRLF (labels and `goto` fail with LF), and `%errorlevel%` inside a parenthesised block is the value from before the block (found at step 14: use a label and `goto` instead).
 - Git: the project is a git repository (`main`, committer identity set in the repository's own config); commit or push only when the author asks.
+- Later mutation specs: `step16.py` 13 (the licence), `step17.py` 12 (the CI workflow), `step18.py` 4 (the order of the steps of `Engine.new_instance`), `step19.py` 8 (`canopy_engine_new_instance_into` and its use; C and Python faults, so the build runs again before some).
+  Run a campaign's copy at a SHORT path (`C:\Users\Argh\mutcopy`), and read which test caught each fault.
+- Out of memory and instances: `Engine.new_instance` makes every Python object before the C call and gets the pointer through a slot (`canopy_engine_new_instance_into`), because ctypes making an int from a
+  RETURNED pointer could fail after the instance existed and lose it (plan: "The flaky real out-of-memory test, investigated"). Do the same for any new call that makes something in C that Python must hold.
 - CI: `.github/workflows/ci.yml` (Windows, MSVC: the whole suite, the packages kept as files of the run, and the other Python versions the wheel claims) is checked by `tests/python/test_ci.py`
   (text only) and `dev/mutation/step17.py`; it has not been run on a real runner yet. `docs/portability_inventory.md` lists everything that is Windows- or MSVC-specific, for a port.
